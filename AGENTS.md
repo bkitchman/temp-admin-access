@@ -180,7 +180,7 @@ rm -f /var/root/.kandji-elevation/meta.json
 rm -f /var/tmp/kandji-approval-attempt /var/tmp/kandji-revoke-network-pending
 rm -f /var/run/kandji-run.lock
 rm -f /etc/sudoers.d/kandji-elevation-logging
-rm -f /var/log/kandji-{approval-monitor,network-monitor,expiration-runner,sudo-elevation}.log
+rm -f /var/log/kandji-elevation.log /var/log/kandji-sudo-elevation.log
 ```
 Also remove both Kandji tags from the device in the Kandji console.
 

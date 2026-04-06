@@ -268,7 +268,7 @@ sleep 30
 acquire_kandji_run_lock
 trap '' TERM
 echo "\$(ts) expiration-runner: running kandji run..."
-/usr/local/bin/kandji run --reset-daily >> /var/log/kandji-expiration-runner.log 2>&1
+/usr/local/bin/kandji run --reset-daily >> /var/log/kandji-elevation.log 2>&1
 echo "\$(ts) expiration-runner: kandji run exited with code \$?"
 release_kandji_run_lock
 launchctl unload "\$PLIST" 2>/dev/null
@@ -297,9 +297,9 @@ EXPRUNNER_EOF
     <integer>$EXPIRE_MINUTE</integer>
   </dict>
   <key>StandardOutPath</key>
-  <string>/var/log/kandji-expiration-runner.log</string>
+  <string>/var/log/kandji-elevation.log</string>
   <key>StandardErrorPath</key>
-  <string>/var/log/kandji-expiration-runner.log</string>
+  <string>/var/log/kandji-elevation.log</string>
 </dict>
 </plist>
 RUNNER_EOF
@@ -462,7 +462,7 @@ if [ -n "\$REQUEST_ID" ] && [ -n "\$STATUS_ENDPOINT" ]; then
         sleep 30
         acquire_kandji_run_lock
         echo "\$(ts) \$LOG_TAG: running kandji run to pick up log-collection tag..."
-        /usr/local/bin/kandji run --reset-daily >> /var/log/kandji-network-monitor.log 2>&1
+        /usr/local/bin/kandji run --reset-daily >> /var/log/kandji-elevation.log 2>&1
         echo "\$(ts) \$LOG_TAG: kandji run exited with code \$?"
         release_kandji_run_lock
         # Verify revocation took effect — retry once after 120s if user is still admin
@@ -472,7 +472,7 @@ if [ -n "\$REQUEST_ID" ] && [ -n "\$STATUS_ENDPOINT" ]; then
           sleep 120
           acquire_kandji_run_lock
           echo "\$(ts) \$LOG_TAG: retry kandji run (revocation not yet confirmed)..."
-          /usr/local/bin/kandji run --reset-daily >> /var/log/kandji-network-monitor.log 2>&1
+          /usr/local/bin/kandji run --reset-daily >> /var/log/kandji-elevation.log 2>&1
           echo "\$(ts) \$LOG_TAG: retry kandji run exited with code \$?"
           release_kandji_run_lock
           IS_ADMIN=\$(dseditgroup -o checkmember -m "\$CURRENT_USER" admin 2>/dev/null | grep -c "yes")
@@ -534,9 +534,9 @@ cat > "$PLIST_PATH" << PLIST_EOF
   <key>RunAtLoad</key>
   <true/>
   <key>StandardOutPath</key>
-  <string>/var/log/kandji-network-monitor.log</string>
+  <string>/var/log/kandji-elevation.log</string>
   <key>StandardErrorPath</key>
-  <string>/var/log/kandji-network-monitor.log</string>
+  <string>/var/log/kandji-elevation.log</string>
 </dict>
 </plist>
 PLIST_EOF

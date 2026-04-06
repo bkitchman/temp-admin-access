@@ -337,7 +337,7 @@ case "\$HTTP_CODE" in
       sleep 30
       acquire_kandji_run_lock
       echo "\$(ts) approval-monitor: running kandji run..."
-      /usr/local/bin/kandji run --reset-daily >> /var/log/kandji-approval-monitor.log 2>&1
+      /usr/local/bin/kandji run --reset-daily >> /var/log/kandji-elevation.log 2>&1
       echo "\$(ts) approval-monitor: kandji run exited with code \$?"
       release_kandji_run_lock
       # Verify elevation took effect — retry once after 120s if not yet admin
@@ -347,7 +347,7 @@ case "\$HTTP_CODE" in
         sleep 120
         acquire_kandji_run_lock
         echo "\$(ts) approval-monitor: retry kandji run (elevation not yet confirmed)..."
-        /usr/local/bin/kandji run --reset-daily >> /var/log/kandji-approval-monitor.log 2>&1
+        /usr/local/bin/kandji run --reset-daily >> /var/log/kandji-elevation.log 2>&1
         echo "\$(ts) approval-monitor: retry kandji run exited with code \$?"
         release_kandji_run_lock
         IS_ADMIN=\$(dseditgroup -o checkmember -m "\$USERNAME" admin 2>/dev/null | grep -c "yes")
@@ -406,9 +406,9 @@ cat > "$APPROVAL_MONITOR_PLIST" << PLIST_EOF
   <key>RunAtLoad</key>
   <true/>
   <key>StandardOutPath</key>
-  <string>/var/log/kandji-approval-monitor.log</string>
+  <string>/var/log/kandji-elevation.log</string>
   <key>StandardErrorPath</key>
-  <string>/var/log/kandji-approval-monitor.log</string>
+  <string>/var/log/kandji-elevation.log</string>
 </dict>
 </plist>
 PLIST_EOF
