@@ -1,0 +1,12 @@
+{
+  "name": "handle-request",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Receives Self Service POST, validates API key, posts Slack approval message, stores request in DynamoDB.",
+  "main": "index.js",
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.600.0",
+    "@aws-sdk/lib-dynamodb": "^3.600.0",
+    "uuid": "^9.0.0"
+  }
+}

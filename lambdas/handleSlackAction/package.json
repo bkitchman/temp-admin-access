@@ -1,0 +1,10 @@
+{
+  "name": "handle-slack-action",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Receives Slack button interactions, routes to approve or deny logic.",
+  "main": "index.js",
+  "dependencies": {
+    "@aws-sdk/client-lambda": "^3.600.0"
+  }
+}

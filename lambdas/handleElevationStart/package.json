@@ -1,0 +1,12 @@
+{
+  "name": "handle-elevation-start",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Called by elevation-start.sh on device to start the 30-minute timer from actual elevation time.",
+  "main": "index.js",
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.600.0",
+    "@aws-sdk/lib-dynamodb": "^3.600.0",
+    "@aws-sdk/client-scheduler": "^3.600.0"
+  }
+}

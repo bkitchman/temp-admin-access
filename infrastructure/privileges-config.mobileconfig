@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>PayloadContent</key>
+	<array>
+		<dict>
+			<key>PayloadDescription</key>
+			<string>Configures SAP Privileges for temporary admin elevation</string>
+			<key>PayloadDisplayName</key>
+			<string>SAP Privileges Configuration</string>
+			<key>PayloadIdentifier</key>
+			<string>corp.sap.privileges.db077a0f-af83-4ef2-af1a-e8c25c021d70</string>
+			<key>PayloadType</key>
+			<string>corp.sap.privileges</string>
+			<key>PayloadUUID</key>
+			<string>db077a0f-af83-4ef2-af1a-e8c25c021d70</string>
+			<key>PayloadVersion</key>
+			<integer>1</integer>
+
+			<!-- Auto-demote after 30 minutes as a backstop if Lambda/EventBridge fails -->
+			<key>DockToggleTimeout</key>
+			<integer>30</integer>
+
+			<!-- User already provided a reason via the Self Service request dialog -->
+			<key>ReasonRequired</key>
+			<false/>
+
+		</dict>
+	</array>
+	<key>PayloadDescription</key>
+	<string>Temporary admin elevation configuration for SAP Privileges. Scoped to tag: temp-admin-elevation.</string>
+	<key>PayloadDisplayName</key>
+	<string>Privileges - Temp Admin Elevation</string>
+	<key>PayloadIdentifier</key>
+	<string>com.kitchman.privileges.temp-elevation</string>
+	<key>PayloadOrganization</key>
+	<string>Kitchman IT</string>
+	<key>PayloadRemovalDisallowed</key>
+	<true/>
+	<key>PayloadScope</key>
+	<string>System</string>
+	<key>PayloadType</key>
+	<string>Configuration</string>
+	<key>PayloadUUID</key>
+	<string>692fbab4-3133-47c1-ad64-a8157d5c2649</string>
+	<key>PayloadVersion</key>
+	<integer>1</integer>
+</dict>
+</plist>

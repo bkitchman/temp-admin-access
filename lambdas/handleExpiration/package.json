@@ -1,0 +1,11 @@
+{
+  "name": "handle-expiration",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Triggered by EventBridge at T+30 min — removes Kandji tag, triggers sudo log collection.",
+  "main": "index.js",
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.600.0",
+    "@aws-sdk/lib-dynamodb": "^3.600.0"
+  }
+}

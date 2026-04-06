@@ -1,0 +1,440 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Temporary Local Admin Access Workflow
+  Kandji Self Service → Slack approval → SAP Privileges elevation → EventBridge auto-expiry
+
+# ---------------------------------------------------------------------------
+# Globals applied to all Lambda functions
+# ---------------------------------------------------------------------------
+Globals:
+  Api:
+    # Throttle all endpoints to prevent flooding — 10 req/s sustained, burst of 20
+    MethodSettings:
+      - ResourcePath: '/*'
+        HttpMethod: '*'
+        ThrottlingBurstLimit: 20
+        ThrottlingRateLimit: 10
+  Function:
+    Runtime: nodejs20.x
+    Timeout: 30
+    MemorySize: 256
+    # All Lambdas share a single CodeUri so the shared/ folder is available
+    # at runtime via relative require('../shared/...')
+    CodeUri: ../lambdas/
+    Environment:
+      Variables:
+        SLACK_BOT_TOKEN: !Ref SlackBotToken
+        SLACK_SIGNING_SECRET: !Ref SlackSigningSecret
+        SLACK_IT_CHANNEL_ID: !Ref SlackItChannelId
+        KANDJI_API_TOKEN: !Ref KandjiApiToken
+        KANDJI_BASE_URL: !Ref KandjiBaseUrl
+        KANDJI_ELEVATION_TAG: !Ref KandjiElevationTag
+        KANDJI_LOG_COLLECTION_TAG: !Ref KandjiLogCollectionTag
+        DYNAMODB_TABLE_NAME: !Ref RequestsTable
+        SELF_SERVICE_API_KEY: !Ref SelfServiceApiKey
+        EMAIL_DOMAIN: !Ref EmailDomain
+        # EVENTBRIDGE_ROLE_ARN is set per-function below to avoid circular dependency
+
+# ---------------------------------------------------------------------------
+# Parameters — supply via samconfig.toml or `sam deploy --parameter-overrides`
+# ---------------------------------------------------------------------------
+Parameters:
+  SlackBotToken:
+    Type: String
+    NoEcho: true
+    Description: Slack Bot OAuth token (xoxb-...)
+  SlackSigningSecret:
+    Type: String
+    NoEcho: true
+    Description: Slack App signing secret for request verification
+  SlackItChannelId:
+    Type: String
+    Description: Slack channel ID for IT admin approval messages (e.g. C012AB3CD)
+  KandjiApiToken:
+    Type: String
+    NoEcho: true
+    Description: Kandji API bearer token
+  KandjiBaseUrl:
+    Type: String
+    Description: Kandji tenant API base URL (e.g. https://yourorg.api.kandji.io)
+  KandjiElevationTag:
+    Type: String
+    Default: temp-admin-elevation
+    Description: Kandji tag name to assign/remove when granting elevation
+  KandjiLogCollectionTag:
+    Type: String
+    Default: temp-admin-log-collection
+    Description: Kandji tag name to assign on expiration — triggers collect-sudo-log.sh
+  SelfServiceApiKey:
+    Type: String
+    NoEcho: true
+    Description: Shared API key used by macOS scripts to authenticate to /request and /log
+  EmailDomain:
+    Type: String
+    Description: Company email domain used to look up Slack user IDs (e.g. company.com)
+  # NOTE: The SAP Privileges app timeout must be configured in the Privileges MDM profile
+  # (ExpirationInterval key) to a value >= 30 minutes so it does not expire before our
+  # backend timer. Recommended: set ExpirationInterval to 35 in the Privileges config profile.
+  SlackItAdminIds:
+    Type: String
+    Default: ''
+    Description: Comma-separated Slack user IDs allowed to use /admin-status (e.g. U012ABC,U034DEF). Leave empty to deny all.
+  OnCallSlackUserId:
+    Type: String
+    Default: ''
+    Description: Slack user ID (e.g. U012ABC) of the on-call IT admin for off-hours auto-approval — leave empty to disable
+  OnCallSlackUsername:
+    Type: String
+    Default: 'On-Call IT Admin'
+    Description: Display name for the on-call IT admin used in Slack thread messages
+  BusinessHoursUtcStart:
+    Type: String
+    Default: '13'
+    Description: Business hours start in UTC (0-23), e.g. 13 = 9am ET. Requests outside this window are auto-approved when an on-call admin is set.
+  BusinessHoursUtcEnd:
+    Type: String
+    Default: '23'
+    Description: Business hours end in UTC (0-23), e.g. 23 = 7pm ET.
+
+# ---------------------------------------------------------------------------
+# Resources
+# ---------------------------------------------------------------------------
+Resources:
+
+  # -------------------------------------------------------------------------
+  # DynamoDB — request state store
+  # -------------------------------------------------------------------------
+  RequestsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: admin-access-requests
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: requestId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: requestId
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+
+  # -------------------------------------------------------------------------
+  # IAM Role — EventBridge Scheduler → Lambda invocation
+  # Defined first so Lambdas can reference its ARN without circular deps
+  # -------------------------------------------------------------------------
+  EventBridgeSchedulerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: admin-access-eventbridge-scheduler-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: scheduler.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: InvokeAdminAccessLambdas
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource:
+                  - !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:admin-access-sendWarning'
+                  - !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:admin-access-handleExpiration'
+
+  # -------------------------------------------------------------------------
+  # Lambda: handleRequest  POST /request
+  # -------------------------------------------------------------------------
+  HandleRequestFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: admin-access-handleRequest
+      Handler: handleRequest/index.handler
+      Description: Receives Self Service POST, validates API key, posts Slack approval message
+      Environment:
+        Variables:
+          PROCESS_SLACK_ACTION_FUNCTION_ARN: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:admin-access-processSlackAction'
+          ON_CALL_SLACK_USER_ID: !Ref OnCallSlackUserId
+          ON_CALL_SLACK_USERNAME: !Ref OnCallSlackUsername
+          BUSINESS_HOURS_UTC_START: !Ref BusinessHoursUtcStart
+          BUSINESS_HOURS_UTC_END: !Ref BusinessHoursUtcEnd
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /request
+            Method: post
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref RequestsTable
+        - Statement:
+            - Effect: Allow
+              Action: lambda:InvokeFunction
+              Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:admin-access-processSlackAction'
+
+  # -------------------------------------------------------------------------
+  # Lambda: handleSlackAction  POST /slack/actions
+  # Verifies Slack signature and immediately invokes processSlackAction async
+  # so Slack gets a 200 response within the 3-second deadline
+  # -------------------------------------------------------------------------
+  HandleSlackActionFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: admin-access-handleSlackAction
+      Handler: handleSlackAction/index.handler
+      Description: Verifies Slack signature and async-invokes processSlackAction
+      Environment:
+        Variables:
+          PROCESS_SLACK_ACTION_FUNCTION_ARN: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:admin-access-processSlackAction'
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /slack/actions
+            Method: post
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: lambda:InvokeFunction
+              Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:admin-access-processSlackAction'
+
+  # -------------------------------------------------------------------------
+  # Lambda: processSlackAction  (invoked async by handleSlackAction)
+  # Does all the heavy work — Kandji, EventBridge scheduling, DynamoDB, Slack
+  # -------------------------------------------------------------------------
+  ProcessSlackActionFunction:
+    Type: AWS::Serverless::Function
+    DependsOn: EventBridgeSchedulerRole
+    Properties:
+      FunctionName: admin-access-processSlackAction
+      Handler: processSlackAction/index.handler
+      Description: Processes Slack approve/deny/revoke — Kandji tags, EventBridge schedules, DynamoDB, Slack replies
+      Environment:
+        Variables:
+          SEND_WARNING_FUNCTION_ARN: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:admin-access-sendWarning'
+          HANDLE_EXPIRATION_FUNCTION_ARN: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:admin-access-handleExpiration'
+          EVENTBRIDGE_ROLE_ARN: !GetAtt EventBridgeSchedulerRole.Arn
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref RequestsTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - scheduler:CreateSchedule
+                - scheduler:DeleteSchedule
+              Resource:
+                  - !Sub 'arn:aws:scheduler:${AWS::Region}:${AWS::AccountId}:schedule/default/warning-*'
+                  - !Sub 'arn:aws:scheduler:${AWS::Region}:${AWS::AccountId}:schedule/default/expiration-*'
+            - Effect: Allow
+              Action: iam:PassRole
+              Resource: !GetAtt EventBridgeSchedulerRole.Arn
+
+  # -------------------------------------------------------------------------
+  # Lambda: handleElevationStart  POST /start
+  # Called by elevation-start.sh on device to start the 30-min timer
+  # from the actual moment of elevation rather than approval time
+  # -------------------------------------------------------------------------
+  HandleElevationStartFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: admin-access-handleElevationStart
+      Handler: handleElevationStart/index.handler
+      Description: Starts the 30-minute timer when device confirms elevation
+      Environment:
+        Variables:
+          SEND_WARNING_FUNCTION_ARN: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:admin-access-sendWarning'
+          HANDLE_EXPIRATION_FUNCTION_ARN: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:admin-access-handleExpiration'
+          EVENTBRIDGE_ROLE_ARN: !GetAtt EventBridgeSchedulerRole.Arn
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /start
+            Method: post
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref RequestsTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - scheduler:CreateSchedule
+                - scheduler:DeleteSchedule
+              Resource:
+                  - !Sub 'arn:aws:scheduler:${AWS::Region}:${AWS::AccountId}:schedule/default/warning-*'
+                  - !Sub 'arn:aws:scheduler:${AWS::Region}:${AWS::AccountId}:schedule/default/expiration-*'
+            - Effect: Allow
+              Action: iam:PassRole
+              Resource: !GetAtt EventBridgeSchedulerRole.Arn
+
+  # -------------------------------------------------------------------------
+  # Lambda: sendWarning  (EventBridge Scheduler T+25 min)
+  # -------------------------------------------------------------------------
+  SendWarningFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: admin-access-sendWarning
+      Handler: sendWarning/index.handler
+      Description: Sends 5-minute warning DM via Slack
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref RequestsTable
+
+  SendWarningFunctionInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt SendWarningFunction.Arn
+      Action: lambda:InvokeFunction
+      Principal: scheduler.amazonaws.com
+      SourceArn: !Sub 'arn:aws:scheduler:${AWS::Region}:${AWS::AccountId}:schedule/default/*'
+
+  # -------------------------------------------------------------------------
+  # Lambda: handleExpiration  (EventBridge Scheduler T+30 min)
+  # -------------------------------------------------------------------------
+  HandleExpirationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: admin-access-handleExpiration
+      Handler: handleExpiration/index.handler
+      Description: Removes Kandji tag, assigns log collection tag, sends expiry DM
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref RequestsTable
+
+  HandleExpirationFunctionInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt HandleExpirationFunction.Arn
+      Action: lambda:InvokeFunction
+      Principal: scheduler.amazonaws.com
+      SourceArn: !Sub 'arn:aws:scheduler:${AWS::Region}:${AWS::AccountId}:schedule/default/*'
+
+  # -------------------------------------------------------------------------
+  # Lambda: revokeNetworkLoss  POST /revoke-network-loss
+  # Called by network monitor on device when network is restored after loss-revocation
+  # -------------------------------------------------------------------------
+  RevokeNetworkLossFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: admin-access-revokeNetworkLoss
+      Handler: revokeNetworkLoss/index.handler
+      Description: Records network-loss revocation, assigns log collection tag, notifies Slack
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /revoke-network-loss
+            Method: post
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref RequestsTable
+
+  # -------------------------------------------------------------------------
+  # Lambda: getStatus  GET /status?requestId=...
+  # Polled by the network monitor on device every 60s to detect early revocation
+  # -------------------------------------------------------------------------
+  GetStatusFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: admin-access-getStatus
+      Handler: getStatus/index.handler
+      Description: Returns current request status — polled by device network monitor
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /status
+            Method: get
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref RequestsTable
+
+  # -------------------------------------------------------------------------
+  # Lambda: handleSlashCommand  POST /slack/slash
+  # Handles /admin-status slash command — called synchronously by Slack
+  # -------------------------------------------------------------------------
+  HandleSlashCommandFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: admin-access-handleSlashCommand
+      Handler: handleSlashCommand/index.handler
+      Description: Handles /admin-status slash command — shows active sessions and request details to IT admins
+      Environment:
+        Variables:
+          SLACK_IT_ADMIN_IDS: !Ref SlackItAdminIds
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /slack/slash
+            Method: post
+      Policies:
+        # N6-07: grant only the specific actions needed — GetItem for detail lookup,
+        # Scan with filter for session list. DynamoDBReadPolicy is intentionally used
+        # here since SAM does not support action-level scoping; the filter in scanActiveRequests()
+        # limits what is returned at the application layer.
+        - DynamoDBReadPolicy:
+            TableName: !Ref RequestsTable
+
+  # -------------------------------------------------------------------------
+  # Lambda: receiveLog  POST /log
+  # -------------------------------------------------------------------------
+  ReceiveLogFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: admin-access-receiveLog
+      Handler: receiveLog/index.handler
+      Description: Receives sudo log from device and uploads it to the Slack thread
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /log
+            Method: post
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref RequestsTable
+
+# ---------------------------------------------------------------------------
+# Outputs
+# ---------------------------------------------------------------------------
+Outputs:
+  ApiBaseUrl:
+    Description: API Gateway base URL
+    Value: !Sub 'https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod'
+
+  RequestEndpoint:
+    Description: Self Service script POST target
+    Value: !Sub 'https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/request'
+
+  SlackActionsEndpoint:
+    Description: Slack Interactivity Request URL
+    Value: !Sub 'https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/slack/actions'
+
+  LogEndpoint:
+    Description: Device sudo log POST target
+    Value: !Sub 'https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/log'
+
+  ElevationStartEndpoint:
+    Description: Device elevation confirmation POST target
+    Value: !Sub 'https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/start'
+
+  StatusEndpoint:
+    Description: Device status poll GET target
+    Value: !Sub 'https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/status'
+
+  DynamoDBTableName:
+    Description: DynamoDB table name
+    Value: !Ref RequestsTable
+
+  SlashCommandEndpoint:
+    Description: Slack slash command request URL — register at api.slack.com/apps under Slash Commands
+    Value: !Sub 'https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/slack/slash'

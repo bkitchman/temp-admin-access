@@ -1,0 +1,22 @@
+# Dependencies
+lambdas/node_modules/
+
+# SAM build artifacts
+infrastructure/.aws-sam/
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Secrets — never commit real values
+samconfig.toml
+
+# IDE
+.vscode/
+.idea/
+
+# kst repo — local Kandji sync tool state
+kst-repo/
+
+# Claude
+.claude/

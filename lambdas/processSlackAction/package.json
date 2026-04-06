@@ -1,0 +1,12 @@
+{
+  "name": "process-slack-action",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Handles the heavy processing for Slack approve/deny actions — invoked async by handleSlackAction.",
+  "main": "index.js",
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.600.0",
+    "@aws-sdk/lib-dynamodb": "^3.600.0",
+    "@aws-sdk/client-scheduler": "^3.600.0"
+  }
+}
