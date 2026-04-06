@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Building a Temporary Admin Access Workflow — Bryan Kitchman</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --navy: #0d1b2a;
+    --navy-mid: #1b2d45;
+    --blue: #1d4ed8;
+    --blue-light: #3b82f6;
+    --accent: #06b6d4;
+    --accent2: #8b5cf6;
+    --text: #1e293b;
+    --text-muted: #64748b;
+    --text-light: #94a3b8;
+    --border: #e2e8f0;
+    --bg: #f8fafc;
+    --bg-card: #ffffff;
+    --green: #059669;
+    --green-bg: #ecfdf5;
+    --green-border: #a7f3d0;
+    --radius: 12px;
+    --shadow: 0 1px 3px rgba(0,0,0,.06), 0 4px 16px rgba(0,0,0,.06);
+    --shadow-hover: 0 4px 8px rgba(0,0,0,.08), 0 12px 32px rgba(0,0,0,.1);
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.75;
+    font-size: 1rem;
+  }
+
+  /* ── Progress bar ── */
+  #progress {
+    position: fixed; top: 0; left: 0; height: 3px; width: 0%;
+    background: linear-gradient(90deg, var(--blue), var(--accent), var(--accent2));
+    z-index: 1000;
+    transition: width .1s linear;
+    border-radius: 0 2px 2px 0;
+  }
+
+  /* ── Hero ── */
+  .hero {
+    position: relative;
+    background: var(--navy);
+    color: #fff;
+    padding: 7rem 2rem 5rem;
+    text-align: center;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: '';
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(59,130,246,.15) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(59,130,246,.15) 1px, transparent 1px);
+    background-size: 40px 40px;
+    mask-image: radial-gradient(ellipse 80% 60% at 50% 50%, black, transparent);
+  }
+  .hero::after {
+    content: '';
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse 70% 50% at 50% 100%, rgba(29,78,216,.35), transparent);
+  }
+  .hero-inner { position: relative; z-index: 1; max-width: 780px; margin: 0 auto; }
+  .hero-eyebrow {
+    display: inline-flex; align-items: center; gap: .4rem;
+    background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.14);
+    border-radius: 20px; padding: .3rem .9rem;
+    font-size: .75rem; font-weight: 600; letter-spacing: .06em;
+    color: var(--accent); text-transform: uppercase; margin-bottom: 1.5rem;
+  }
+  .hero h1 {
+    font-size: clamp(2rem, 5vw, 3.2rem);
+    font-weight: 800; line-height: 1.15;
+    letter-spacing: -.02em;
+    margin-bottom: 1.25rem;
+    background: linear-gradient(135deg, #fff 40%, #93c5fd);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  }
+  .hero-sub {
+    font-size: 1.1rem; color: #94a3b8;
+    max-width: 580px; margin: 0 auto 2rem; line-height: 1.7;
+  }
+  .hero-meta {
+    display: flex; align-items: center; justify-content: center;
+    gap: 1.25rem; margin-bottom: 2rem;
+    font-size: .8rem; color: #64748b;
+  }
+  .hero-meta span { display: flex; align-items: center; gap: .35rem; }
+  .tags { display: flex; gap: .5rem; justify-content: center; flex-wrap: wrap; }
+  .tag {
+    background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.12);
+    border-radius: 20px; padding: .25rem .75rem;
+    font-size: .75rem; font-weight: 500; color: #94a3b8;
+    transition: background .2s, color .2s;
+  }
+  .tag:hover { background: rgba(255,255,255,.14); color: #fff; }
+
+  /* ── Layout ── */
+  .page-wrap { max-width: 1100px; margin: 0 auto; padding: 0 2rem; display: grid; grid-template-columns: 1fr 220px; gap: 3rem; align-items: start; }
+  .content { min-width: 0; padding: 3.5rem 0 5rem; }
+  .toc-wrap { padding-top: 3.5rem; position: sticky; top: 2rem; }
+
+  /* ── TOC ── */
+  .toc {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 1.25rem;
+    font-size: .82rem;
+  }
+  .toc-title { font-weight: 700; font-size: .7rem; text-transform: uppercase; letter-spacing: .08em; color: var(--text-muted); margin-bottom: .75rem; }
+  .toc a { display: block; color: var(--text-muted); text-decoration: none; padding: .25rem 0; border-left: 2px solid transparent; padding-left: .75rem; transition: color .15s, border-color .15s; line-height: 1.4; }
+  .toc a:hover, .toc a.active { color: var(--blue); border-left-color: var(--blue); }
+  .toc a.sub { padding-left: 1.5rem; font-size: .78rem; }
+
+  /* ── Section headings ── */
+  h2 {
+    font-size: 1.5rem; font-weight: 800; color: var(--navy);
+    margin: 3.5rem 0 1rem; padding-bottom: .6rem;
+    border-bottom: 2px solid var(--border);
+    letter-spacing: -.02em;
+    scroll-margin-top: 2rem;
+  }
+  h3 { font-size: 1.1rem; font-weight: 700; color: var(--navy); margin: 2rem 0 .75rem; scroll-margin-top: 2rem; }
+  p { margin-bottom: 1.25rem; color: #374151; line-height: 1.8; }
+  ul, ol { margin: 0 0 1.25rem 1.5rem; color: #374151; }
+  li { margin-bottom: .5rem; line-height: 1.7; }
+  a { color: var(--blue); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  em { color: var(--navy); font-style: italic; }
+  strong { color: var(--navy); font-weight: 700; }
+
+  /* ── Inline code ── */
+  code {
+    background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 5px;
+    padding: .15rem .45rem;
+    font-family: 'JetBrains Mono', 'SF Mono', monospace; font-size: .82em;
+    color: #be185d; font-weight: 500;
+  }
+
+  /* ── Code block ── */
+  .code-block { position: relative; margin: 1.75rem 0; }
+  .code-label {
+    position: absolute; top: 0; left: 0;
+    background: rgba(255,255,255,.08); border-radius: var(--radius) 0 var(--radius) 0;
+    padding: .2rem .65rem; font-size: .65rem; font-weight: 600;
+    letter-spacing: .07em; text-transform: uppercase; color: #64748b;
+  }
+  pre {
+    background: #0f172a; color: #e2e8f0; border-radius: var(--radius);
+    padding: 1.5rem 1.5rem 1.5rem; overflow-x: auto;
+    font-size: .82rem; line-height: 1.7;
+    font-family: 'JetBrains Mono', 'SF Mono', monospace;
+    border: 1px solid rgba(255,255,255,.06);
+    box-shadow: 0 4px 20px rgba(0,0,0,.15);
+  }
+  pre code { background: none; border: none; padding: 0; color: inherit; font-size: inherit; font-weight: 400; }
+
+  /* ── Callout ── */
+  .callout {
+    display: flex; gap: .75rem; align-items: flex-start;
+    border-radius: var(--radius); padding: 1rem 1.25rem; margin: 1.5rem 0;
+    border: 1px solid;
+  }
+  .callout-icon { font-size: 1.1rem; flex-shrink: 0; margin-top: .1rem; }
+  .callout p { margin: 0; font-size: .95rem; }
+  .callout.success { background: var(--green-bg); border-color: var(--green-border); }
+  .callout.success .callout-icon::before { content: '✅'; }
+  .callout.info { background: #eff6ff; border-color: #bfdbfe; }
+  .callout.info .callout-icon::before { content: '💡'; }
+
+  /* ── Flow steps ── */
+  .flow { margin: 1.75rem 0; }
+  .flow-step {
+    display: flex; gap: 1.25rem; position: relative; padding-bottom: 1.5rem;
+  }
+  .flow-step:not(:last-child)::before {
+    content: ''; position: absolute; left: 13px; top: 28px; bottom: 0;
+    width: 2px; background: linear-gradient(to bottom, var(--blue-light), transparent);
+  }
+  .step-num {
+    background: linear-gradient(135deg, var(--blue), var(--accent2));
+    color: #fff; border-radius: 50%;
+    width: 28px; height: 28px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: .75rem; font-weight: 800; box-shadow: 0 0 0 4px #e0edff;
+    position: relative; z-index: 1;
+  }
+  .step-text { padding-top: .1rem; }
+  .step-text strong { display: block; font-weight: 700; color: var(--navy); margin-bottom: .2rem; font-size: .95rem; }
+  .step-text span { font-size: .88rem; color: var(--text-muted); line-height: 1.65; }
+
+  /* ── Architecture grid ── */
+  .arch-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 1rem; margin: 1.5rem 0; }
+  .arch-card {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 1.25rem;
+    transition: transform .2s, box-shadow .2s, border-color .2s;
+    cursor: default;
+  }
+  .arch-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-hover); border-color: #bfdbfe; }
+  .arch-card-icon { font-size: 1.5rem; margin-bottom: .6rem; }
+  .arch-card h4 { font-size: .8rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--blue); margin-bottom: .4rem; }
+  .arch-card p { font-size: .87rem; color: var(--text-muted); margin: 0; line-height: 1.6; }
+
+  /* ── Security grid ── */
+  .security-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; margin: 1.5rem 0; }
+  .security-item {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 1rem 1.1rem;
+    transition: transform .2s, box-shadow .2s;
+    border-top: 3px solid var(--green);
+  }
+  .security-item:hover { transform: translateY(-2px); box-shadow: var(--shadow-hover); }
+  .security-item h4 { font-size: .88rem; font-weight: 700; color: var(--navy); margin-bottom: .35rem; display: flex; align-items: center; gap: .4rem; }
+  .security-item h4::before { content: '🔒'; font-size: .8rem; }
+  .security-item p { font-size: .83rem; color: var(--text-muted); margin: 0; line-height: 1.6; }
+
+  /* ── Lessons ── */
+  .lesson {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-left: 4px solid var(--blue-light);
+    border-radius: 0 var(--radius) var(--radius) 0;
+    padding: 1.1rem 1.4rem; margin-bottom: 1rem;
+    transition: border-left-color .2s, box-shadow .2s;
+  }
+  .lesson:hover { border-left-color: var(--accent2); box-shadow: var(--shadow); }
+  .lesson h4 { font-weight: 700; color: var(--navy); margin-bottom: .35rem; font-size: .95rem; }
+  .lesson p { font-size: .9rem; margin: 0; color: #4b5563; line-height: 1.7; }
+
+  /* ── Stats ── */
+  .stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 1rem; margin: 1.75rem 0; }
+  .stat {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 1.25rem 1rem;
+    text-align: center; position: relative; overflow: hidden;
+    transition: transform .2s, box-shadow .2s;
+  }
+  .stat::before {
+    content: ''; position: absolute; inset: 0;
+    background: linear-gradient(135deg, rgba(29,78,216,.04), rgba(139,92,246,.04));
+  }
+  .stat:hover { transform: translateY(-2px); box-shadow: var(--shadow-hover); }
+  .stat-num {
+    font-size: 2.1rem; font-weight: 800; line-height: 1;
+    background: linear-gradient(135deg, var(--blue), var(--accent2));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    margin-bottom: .25rem;
+  }
+  .stat-label { font-size: .75rem; color: var(--text-muted); font-weight: 500; }
+
+  /* ── Video embed ── */
+  .video-wrap {
+    position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden;
+    border-radius: var(--radius); margin: 1.75rem 0;
+    box-shadow: 0 8px 32px rgba(0,0,0,.15);
+  }
+  .video-wrap iframe {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0;
+  }
+
+  /* ── Footer ── */
+  footer {
+    background: var(--navy); color: #475569;
+    text-align: center; padding: 2.5rem 2rem;
+    font-size: .82rem; margin-top: 0;
+  }
+  footer a { color: #94a3b8; }
+  footer a:hover { color: #fff; }
+
+  /* ── Fade-in animation ── */
+  .fade-in { opacity: 0; transform: translateY(20px); transition: opacity .5s ease, transform .5s ease; }
+  .fade-in.visible { opacity: 1; transform: none; }
+
+  /* ── Responsive ── */
+  @media (max-width: 900px) {
+    .page-wrap { grid-template-columns: 1fr; }
+    .toc-wrap { display: none; }
+  }
+  @media (max-width: 600px) {
+    .page-wrap { padding: 0 1rem; }
+    .hero { padding: 5rem 1.25rem 3.5rem; }
+    .stat-row { grid-template-columns: repeat(3, 1fr); }
+  }
+</style>
+</head>
+<body>
+
+<div id="progress"></div>
+
+<!-- ══════════════════════════════ HERO ══════════════════════════════ -->
+<div class="hero">
+  <div class="hero-inner">
+    <div class="hero-eyebrow">Deep Dive · macOS Security</div>
+    <h1>Building a Zero-Trust Temporary Admin Access Workflow on macOS</h1>
+    <p class="hero-sub">How I replaced the "just make them a local admin" workaround with a Slack-approved, time-limited, fully audited elevation pipeline — and what 11 rounds of security audits taught me along the way.</p>
+    <div class="hero-meta">
+      <span>🗓 April 2026</span>
+      <span>⏱ ~12 min read</span>
+      <span>👤 Bryan Kitchman</span>
+    </div>
+    <div class="tags">
+      <span class="tag">AWS Lambda</span>
+      <span class="tag">Iru MDM</span>
+      <span class="tag">SAP Privileges</span>
+      <span class="tag">Slack</span>
+      <span class="tag">DynamoDB</span>
+      <span class="tag">EventBridge</span>
+      <span class="tag">Node.js</span>
+      <span class="tag">macOS</span>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════ BODY ══════════════════════════════ -->
+<div class="page-wrap">
+
+  <main class="content">
+
+    <!-- THE PROBLEM -->
+    <h2 id="problem">The Problem</h2>
+
+    <p class="fade-in">Every IT team knows the conversation. A developer needs to install a dependency. An engineer needs to run a system-level diagnostic. A designer needs to update a font cache. The ask is always the same: <em>"Can you just make me a local admin for a bit?"</em></p>
+
+    <p class="fade-in">The traditional answers are both bad. Option A: give them permanent local admin rights, accept the expanded attack surface, and hope they don't accidentally break their system or run a malicious installer. Option B: have IT remote in every single time, creating a bottleneck that interrupts both the user and the IT team.</p>
+
+    <p class="fade-in">I wanted a third path: <strong>just-in-time admin access, approved in Slack, time-limited to 30 minutes, and fully audited</strong>. No persistent privilege. No IT babysitting. A complete audit trail of every command run during the window.</p>
+
+    <div class="callout success fade-in">
+      <span class="callout-icon"></span>
+      <p><strong>Goal:</strong> Users get self-service access in under 60 seconds. IT maintains approval control. Every session auto-expires. Every sudo command is logged and shipped to the Slack thread.</p>
+    </div>
+
+    <!-- HOW IT WORKS -->
+    <h2 id="how-it-works">How It Works</h2>
+
+    <div class="video-wrap fade-in">
+      <iframe
+        src="https://www.youtube.com/embed/mqxZDVmA0wI"
+        title="Temporary Admin Access Workflow — full demo including log tail"
+        frameborder="0"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        allowfullscreen>
+      </iframe>
+    </div>
+
+    <div class="flow fade-in">
+      <div class="flow-step">
+        <div class="step-num">1</div>
+        <div class="step-text">
+          <strong>User opens Iru Self Service and clicks "Request Admin Access"</strong>
+          <span>A script prompts for a reason via osascript dialog, collects device identity (hostname, serial), and POSTs a signed request to an API Gateway endpoint.</span>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="step-num">2</div>
+        <div class="step-text">
+          <strong>IT receives an interactive Slack approval message</strong>
+          <span>The request includes user, hostname, serial, and reason. Approve/Deny buttons are shown with a confirmation dialog. Posted to a dedicated IT channel.</span>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="step-num">3</div>
+        <div class="step-text">
+          <strong>IT clicks Approve — Iru tag assigned + background approval monitor detects it</strong>
+          <span>A background LaunchDaemon polls <code>/status</code> every 20 seconds. On approval, it calls <code>iru run</code> directly — the fastest path to processing Library Items. The user sees an "approved" alert within 20 seconds.</span>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="step-num">4</div>
+        <div class="step-text">
+          <strong>Device runs elevation-start.sh via Iru Library Item</strong>
+          <span>Calls <code>PrivilegesCLI --add</code> to grant admin, enables a sudoers drop-in for command logging, notifies the backend to start the 30-minute timer, installs a network monitor LaunchDaemon.</span>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="step-num">5</div>
+        <div class="step-text">
+          <strong>EventBridge sends a 5-minute warning DM, then fires expiration at T+30</strong>
+          <span>Timers are anchored to when the <em>device</em> confirms elevation — not when IT clicks Approve. The user always gets the full 30 minutes.</span>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="step-num">6</div>
+        <div class="step-text">
+          <strong>On expiration, Iru removes the tag and collects the sudo log</strong>
+          <span>A second Iru tag triggers <code>collect-sudo-log.sh</code>, which ships the sudoers log to the backend. The backend uploads it as a file attachment in the original Slack approval thread.</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ARCHITECTURE -->
+    <h2 id="architecture">Architecture</h2>
+
+    <p class="fade-in">The backend is a fully serverless AWS SAM application. There's no always-on infrastructure — all compute is Lambda functions invoked by API Gateway or EventBridge Scheduler.</p>
+
+    <div class="arch-grid fade-in">
+      <div class="arch-card">
+        <div class="arch-card-icon">⚡</div>
+        <h4>API Gateway + Lambda</h4>
+        <p>9 Lambda functions handle request intake, Slack actions, device confirmations, log receipt, status polling, and expiration. All endpoints behind API key auth.</p>
+      </div>
+      <div class="arch-card">
+        <div class="arch-card-icon">🗄</div>
+        <h4>DynamoDB</h4>
+        <p>Single-table design stores each request's full lifecycle: status, timestamps, Slack thread IDs, device ID, and actor identity for every state transition.</p>
+      </div>
+      <div class="arch-card">
+        <div class="arch-card-icon">⏰</div>
+        <h4>EventBridge Scheduler</h4>
+        <p>One-time schedules per session for the 5-minute warning (T+25) and expiration (T+30). Auto-delete after firing via <code>ActionAfterCompletion: DELETE</code>.</p>
+      </div>
+      <div class="arch-card">
+        <div class="arch-card-icon">📱</div>
+        <h4>Iru MDM</h4>
+        <p>Two tags act as signals. Elevation tag triggers the Privileges profile. Log-collection tag triggers log shipping. Device-side <code>iru run</code> forces immediate processing.</p>
+      </div>
+      <div class="arch-card">
+        <div class="arch-card-icon">🔑</div>
+        <h4>SAP Privileges</h4>
+        <p>Open-source macOS app providing controlled, time-limited local admin via a LaunchAgent. Scoped via an Iru config profile — only activates on tagged devices.</p>
+      </div>
+      <div class="arch-card">
+        <div class="arch-card-icon">🔐</div>
+        <h4>System Keychain</h4>
+        <p>API key stored in the macOS system keychain (accessible by root) via a provisioning script. Retrieved at runtime — never hardcoded in source.</p>
+      </div>
+    </div>
+
+    <h3 id="slack-lambda">The Slack ↔ Lambda Handshake</h3>
+
+    <p class="fade-in">Slack requires a 200 response within 3 seconds of an interactive action. But processing an approval — hitting Iru, writing to DynamoDB, creating EventBridge schedules — takes longer. The solution is a two-Lambda pattern:</p>
+
+    <ol class="fade-in">
+      <li><code>handleSlackAction</code> verifies the Slack HMAC-SHA256 signature and immediately invokes <code>processSlackAction</code> asynchronously (<code>InvocationType: 'Event'</code>).</li>
+      <li><code>handleSlackAction</code> returns 200 to Slack within milliseconds.</li>
+      <li><code>processSlackAction</code> runs independently and handles all the heavy work.</li>
+    </ol>
+
+    <h3 id="timer-anchoring">Timer Anchoring</h3>
+
+    <p class="fade-in">An early design mistake: the 30-minute timer was started at approval time. But there's latency between IT clicking Approve and the device actually being elevated — MDM check-in, Iru running the script, PrivilegesCLI executing. A user could lose 3–5 minutes before they even had admin.</p>
+
+    <p class="fade-in">The fix: <code>elevation-start.sh</code> POSTs to a <code>/start</code> endpoint when elevation is confirmed on device. The backend creates EventBridge schedules from that timestamp. The user always gets a full 30 minutes from the moment they're actually elevated.</p>
+
+    <div class="code-block fade-in">
+      <span class="code-label">bash</span>
+      <pre><code># elevation-start.sh — notify backend that elevation is confirmed
+HTTP_STATUS=$(curl -s -o "$ELEVATION_RESPONSE_FILE" -w "%{http_code}" \
+  -X POST "$API_ENDPOINT" \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: $API_KEY" \
+  --max-time 15 \
+  -d "{\"requestId\":\"$REQUEST_ID\",\"serial\":\"$SERIAL\"}")</code></pre>
+    </div>
+
+    <!-- SECURITY -->
+    <h2 id="security">Security Features</h2>
+
+    <p class="fade-in">After eleven rounds of security audits, the system incorporates defense-in-depth across every layer:</p>
+
+    <div class="security-grid fade-in">
+      <div class="security-item">
+        <h4>Slack Signature Verification</h4>
+        <p>Every webhook verified with HMAC-SHA256. Requests older than 5 minutes rejected. Timing-safe comparison via <code>crypto.timingSafeEqual</code>.</p>
+      </div>
+      <div class="security-item">
+        <h4>DynamoDB Conditional Writes</h4>
+        <p>All status transitions use <code>ConditionExpression</code> atomically. Two IT admins clicking Approve simultaneously results in exactly one approval.</p>
+      </div>
+      <div class="security-item">
+        <h4>Input Validation Everywhere</h4>
+        <p>UUID format validation on all device endpoints. Field length limits. Serial validated as 8–14 uppercase alphanumeric. Lambda endpoints reject non-object JSON bodies.</p>
+      </div>
+      <div class="security-item">
+        <h4>Slack mrkdwn Injection Prevention</h4>
+        <p>All user-controlled fields passed through <code>escapeSlack()</code> before embedding in Block Kit messages. Prevents link injection via <code>&lt;URL|text&gt;</code> syntax.</p>
+      </div>
+      <div class="security-item">
+        <h4>Device Identity Binding</h4>
+        <p>Serial stored at request time is validated against every subsequent device call. A device can only interact with its own session — not another device's.</p>
+      </div>
+      <div class="security-item">
+        <h4>Network Loss Revocation</h4>
+        <p>LaunchDaemon polls every 60 seconds. Network loss triggers immediate admin removal. Auth errors (401/403) fail-secure rather than retry.</p>
+      </div>
+      <div class="security-item">
+        <h4>IT Slash Command</h4>
+        <p><code>/admin-status</code> restricted to a configured Slack user ID allowlist. Empty allowlist defaults to denying all access (fail closed).</p>
+      </div>
+      <div class="security-item">
+        <h4>Off-Hours Delegation</h4>
+        <p>Optional off-hours auto-approval routes to an on-call admin. Configuration errors fail closed — requests held for manual review, never auto-approved on misconfiguration.</p>
+      </div>
+      <div class="security-item">
+        <h4>Transient Failure Resilience</h4>
+        <p>Iru API calls use exponential backoff (1s, 2s) for 5xx/429 — up to 3 attempts. 4xx throws immediately. Prevents a single rate-limit from dropping an entire operation.</p>
+      </div>
+      <div class="security-item">
+        <h4>Partial Failure Resilience</h4>
+        <p>Elevation removal is the critical path — if it fails, EventBridge retries. Log collection failure is non-critical: session is still marked expired and IT is alerted.</p>
+      </div>
+      <div class="security-item">
+        <h4>Audit Trail &amp; Delayed Notifications</h4>
+        <p>Every transition records timestamp and actor. User DMs are deliberately delayed until sudo log collection succeeds — audit trail secured before user is notified.</p>
+      </div>
+      <div class="security-item">
+        <h4>Secrets Management</h4>
+        <p>API key in macOS system keychain — never in scripts. Lambda secrets via AWS SSM. Module-load-time validation ensures Lambdas fail fast if secrets are missing.</p>
+      </div>
+      <div class="security-item">
+        <h4>Atomic Metadata Writes</h4>
+        <p>Session metadata at <code>/var/root/.iru-elevation/meta.json</code> (mode 600). <code>mktemp</code> + <code>mv</code> pattern — a crash mid-write never leaves a partial file.</p>
+      </div>
+      <div class="security-item">
+        <h4>iru run Mutex Lock</h4>
+        <p>File lock at <code>/var/run/iru-run.lock</code> serializes all <code>iru run</code> invocations across three daemons. PID-aware — detects and clears stale locks from killed processes.</p>
+      </div>
+      <div class="security-item">
+        <h4>Post-Run State Verification</h4>
+        <p>After each <code>iru run</code>, daemons verify the expected state change occurred. Single retry after 120s if not confirmed — absorbs Iru tag propagation latency.</p>
+      </div>
+    </div>
+
+    <!-- DESIGN DECISIONS -->
+    <h2 id="design-decisions">Key Design Decisions</h2>
+
+    <h3 id="why-tags">Why Iru Tags as Signals?</h3>
+    <p class="fade-in">Iru Library Items can be scoped to specific device tags. By scoping a Library Item to the <code>temp-admin-elevation</code> tag, we get Iru's built-in delivery guarantees: retry on failure, run-at-install semantics, and immediate execution on <code>iru run</code>. We don't need to build our own device delivery mechanism — Iru handles it.</p>
+
+    <h3 id="why-privileges">Why SAP Privileges Instead of dseditgroup?</h3>
+    <p class="fade-in">Direct <code>dseditgroup</code> calls add the user to the local admin group and require explicit cleanup. SAP Privileges integrates with macOS's authorization model, provides a visible UI indicator, supports an <code>ExpirationInterval</code> MDM key as a safety-net fallback, and is open-source with active maintenance. The MDM profile approach means the app only works on tagged devices.</p>
+
+    <h3 id="why-two-tags">Why Two Iru Tags?</h3>
+    <p class="fade-in">Separation of concerns. The elevation tag is removed on revocation or expiration. The log-collection tag is assigned on revocation or expiration. These are often simultaneous but not always. Keeping them separate avoids race conditions and makes each Library Item's trigger unambiguous.</p>
+
+    <h3 id="why-eventbridge">Why EventBridge Scheduler Instead of SQS Delayed Messages?</h3>
+    <p class="fade-in">EventBridge Scheduler supports named one-time schedules that can be <em>deleted by name</em>. Critical for the revoke flow: if IT revokes at T+15, we cancel the T+25 warning and T+30 expiration schedules. SQS delayed messages can't be cancelled after enqueuing.</p>
+
+    <!-- LESSONS -->
+    <h2 id="lessons">Lessons Learned</h2>
+
+    <div class="lesson fade-in">
+      <h4>The real attack surface is the device, not the backend</h4>
+      <p>Most of the interesting security findings were in shell scripts — unvalidated data in generated scripts, metadata files with wrong permissions, Python subprocesses without timeouts. Lambda code is easy to reason about; device-side bash is where subtle bugs hide. Treat shell scripts as first-class security artifacts.</p>
+    </div>
+    <div class="lesson fade-in">
+      <h4>Race conditions require database-level guards, not application-level checks</h4>
+      <p>The "fetch → check status → update" pattern is a TOCTOU race. Two concurrent Lambda invocations can both pass the check and both apply the update. DynamoDB's <code>ConditionExpression</code> moves the check into the atomic write. Non-negotiable for state machines where each transition must happen exactly once.</p>
+    </div>
+    <div class="lesson fade-in">
+      <h4>Anchor timers to device confirmation, not approval</h4>
+      <p>Any time you have an async pipeline (approve → MDM deliver → device run → confirm), the user experience is only as good as the last step. Anchoring timers to device confirmation cost one extra API call but resulted in users always getting the full 30-minute window they were promised.</p>
+    </div>
+    <div class="lesson fade-in">
+      <h4>Iterative security auditing finds what point-in-time reviews miss</h4>
+      <p>Eleven rounds of security audits found meaningful issues in almost every round — not because earlier rounds were bad, but because fixing issues and adding features creates new surface area. Build security review into your iteration cycle, not just your launch gate.</p>
+    </div>
+    <div class="lesson fade-in">
+      <h4>Zero open findings is achievable — accept risk explicitly, not by omission</h4>
+      <p>The accepted-risk items were each evaluated deliberately. Accepted risk with documented rationale is categorically different from unfixed risk with no explanation.</p>
+    </div>
+    <div class="lesson fade-in">
+      <h4>New features are new attack surface — review them immediately</h4>
+      <p>The slash command was the highest-severity new finding: signature verification was in place, but no authorization check existed. Any workspace member could enumerate all active admin sessions. The fix was three lines. The gap between "implemented" and "authorized" is where high-severity findings live.</p>
+    </div>
+    <div class="lesson fade-in">
+      <h4>Fail closed beats fail open, especially for access control</h4>
+      <p>The off-hours auto-approval feature had a subtle misconfiguration path that auto-approved every request on invalid configuration. The correct behavior: if you're not sure it's off-hours, require manual approval. Any access-control feature that grants permissions by default on config error is a security risk.</p>
+    </div>
+    <div class="lesson fade-in">
+      <h4>Escape at the output boundary, not at ingestion</h4>
+      <p>Early versions sanitized input at ingestion time — this leads to double-encoding bugs and false confidence. Store raw data; escape at every output boundary. Each output context (Slack mrkdwn, JSON, shell) has different escaping requirements.</p>
+    </div>
+    <div class="lesson fade-in">
+      <h4>Never call a process runner from within a script being run by that process runner</h4>
+      <p><code>elevation-start.sh</code> was calling <code>iru run</code> at the end of its own execution — but it <em>runs inside</em> an <code>iru run</code> triggered by the approval monitor. The agent holds an internal lock during execution; the nested call deadlocked the outer agent. A nested <code>iru run</code> inside an Iru script is a deadlock by construction.</p>
+    </div>
+    <div class="lesson fade-in">
+      <h4>Verify the check actually checks something</h4>
+      <p>The UTF-8 validation in <code>receiveLog</code> was <code>Buffer.from(x).equals(Buffer.from(x))</code> — a tautology that always returns true. It passed code review because it <em>looked</em> correct. Always test security checks with input that <em>should</em> fail. A check that never rejects is not a check.</p>
+    </div>
+
+    <!-- STATS -->
+    <h2 id="stats">By the Numbers</h2>
+
+    <div class="stat-row">
+      <div class="stat"><div class="stat-num" data-target="10">0</div><div class="stat-label">Lambda functions</div></div>
+      <div class="stat"><div class="stat-num" data-target="5">0</div><div class="stat-label">Device shell scripts</div></div>
+      <div class="stat"><div class="stat-num">30m</div><div class="stat-label">Max elevation window</div></div>
+      <div class="stat"><div class="stat-num">&lt;60s</div><div class="stat-label">Approval → elevated</div></div>
+      <div class="stat"><div class="stat-num">~3s</div><div class="stat-label">Slack latency</div></div>
+      <div class="stat"><div class="stat-num" data-target="88">0</div><div class="stat-label">Security fixes</div></div>
+    </div>
+
+    <!-- RECENTLY SHIPPED -->
+    <h2 id="recently-shipped">Recently Shipped</h2>
+    <ul class="fade-in">
+      <li><strong>Background approval monitor:</strong> Self Service script exits in under 5 seconds. A background LaunchDaemon polls for approval every 20 seconds — no more blocking the Iru Self Service app.</li>
+      <li><strong>Removed all <code>blankPush</code> calls:</strong> <code>blankPush</code> triggers an MDM check-in, not a Library Item run. Device-side <code>iru run</code> is now the exclusive mechanism for picking up tag changes.</li>
+      <li><strong>iru run mutex lock:</strong> Three background daemons could previously call <code>iru run</code> concurrently. A PID-aware file lock serializes all invocations.</li>
+      <li><strong>Delayed revocation DMs:</strong> Users are not notified until after sudo logs are successfully collected. Audit trail secured first.</li>
+      <li><strong>Slack original message lifecycle:</strong> The approval message is updated to a "completed" state when log collection succeeds — outcome and timeline shown, all buttons removed.</li>
+      <li><strong>Fixed nested <code>iru run</code> deadlock:</strong> Removed the redundant inner <code>iru run</code> call inside <code>elevation-start.sh</code> that deadlocked the outer agent.</li>
+      <li><strong>Switched to <code>iru run --reset-daily</code>:</strong> Forces full re-evaluation even if the agent's daily run already completed.</li>
+      <li><strong>Post-run state verification with 120s retry:</strong> Daemons confirm expected state changes after every <code>iru run</code>.</li>
+      <li><strong>Off-hours failure visibility:</strong> If off-hours auto-approval fails, a warning posts to the IT Slack thread immediately.</li>
+      <li><strong>Degraded log warning:</strong> If timezone conversion fails during log collection, a visible warning is prepended to the uploaded log.</li>
+    </ul>
+
+    <!-- WHAT'S NEXT -->
+    <h2 id="whats-next">What's Next</h2>
+    <ul class="fade-in">
+      <li><strong>Extended audit retention:</strong> Export DynamoDB records to S3 before TTL expiration for long-term compliance storage.</li>
+      <li><strong>Trend dashboard:</strong> Surface reason categories and per-team request frequency in a read-only view for IT leadership.</li>
+      <li><strong>Rotation-aware off-hours:</strong> Pull the on-call rotation from PagerDuty rather than a static Slack user ID.</li>
+    </ul>
+
+    <div class="callout info fade-in">
+      <span class="callout-icon"></span>
+      <p>Built for a macOS-first environment using Iru as the MDM, but the core pattern — Slack-gated JIT access with EventBridge timers and MDM tag signaling — translates to other MDM platforms with an API. <a href="https://github.com/bkitchman/temp-admin-access">Source on GitHub →</a></p>
+    </div>
+
+  </main>
+
+  <!-- ══════════════════════════════ TOC ══════════════════════════════ -->
+  <aside class="toc-wrap">
+    <nav class="toc">
+      <div class="toc-title">On this page</div>
+      <a href="#problem">The Problem</a>
+      <a href="#how-it-works">How It Works</a>
+      <a href="#architecture">Architecture</a>
+      <a href="#slack-lambda" class="sub">Slack ↔ Lambda</a>
+      <a href="#timer-anchoring" class="sub">Timer Anchoring</a>
+      <a href="#security">Security Features</a>
+      <a href="#design-decisions">Design Decisions</a>
+      <a href="#why-tags" class="sub">Why Tags?</a>
+      <a href="#why-privileges" class="sub">Why Privileges?</a>
+      <a href="#why-eventbridge" class="sub">Why EventBridge?</a>
+      <a href="#lessons">Lessons Learned</a>
+      <a href="#stats">By the Numbers</a>
+      <a href="#recently-shipped">Recently Shipped</a>
+      <a href="#whats-next">What's Next</a>
+    </nav>
+  </aside>
+
+</div>
+
+<footer>
+  <p>Built by <a href="https://github.com/bkitchman">Bryan Kitchman</a> &nbsp;·&nbsp; <a href="/">kitchman.net</a> &nbsp;·&nbsp; <a href="https://github.com/bkitchman/temp-admin-access">GitHub</a> &nbsp;·&nbsp; AWS SAM · Iru MDM · SAP Privileges · Slack</p>
+</footer>
+
+<script>
+  // ── Read progress bar ──
+  const progressBar = document.getElementById('progress');
+  window.addEventListener('scroll', () => {
+    const doc = document.documentElement;
+    const pct = (doc.scrollTop / (doc.scrollHeight - doc.clientHeight)) * 100;
+    progressBar.style.width = Math.min(pct, 100) + '%';
+  }, { passive: true });
+
+  // ── Fade-in on scroll ──
+  const fadeEls = document.querySelectorAll('.fade-in');
+  const obs = new IntersectionObserver((entries) => {
+    entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); obs.unobserve(e.target); } });
+  }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+  fadeEls.forEach(el => obs.observe(el));
+
+  // ── Animated stat counters ──
+  const statEls = document.querySelectorAll('.stat-num[data-target]');
+  const statObs = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (!e.isIntersecting) return;
+      const el = e.target;
+      const target = +el.dataset.target;
+      let start = 0;
+      const step = target / 40;
+      const timer = setInterval(() => {
+        start = Math.min(start + step, target);
+        el.textContent = Math.round(start);
+        if (start >= target) clearInterval(timer);
+      }, 30);
+      statObs.unobserve(el);
+    });
+  }, { threshold: 0.5 });
+  statEls.forEach(el => statObs.observe(el));
+
+  // ── TOC active section highlight ──
+  const headings = document.querySelectorAll('h2[id], h3[id]');
+  const tocLinks = document.querySelectorAll('.toc a');
+  const headingObs = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        tocLinks.forEach(l => l.classList.remove('active'));
+        const active = document.querySelector(`.toc a[href="#${e.target.id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-10% 0px -80% 0px' });
+  headings.forEach(h => headingObs.observe(h));
+</script>
+
+</body>
+</html>
