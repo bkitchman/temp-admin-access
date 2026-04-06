@@ -103,6 +103,51 @@ if [ $OSASCRIPT_EXIT -ne 0 ] || [ -z "$REASON" ]; then
   exit 0
 fi
 
+# Duration picker
+DURATION_CHOICE=$(launchctl asuser "$CURRENT_USER_UID" sudo -u "$USERNAME" osascript <<'OSASCRIPT'
+set choices to {"5 minutes", "10 minutes", "15 minutes", "30 minutes"}
+set result to choose from list choices ¬
+  with title "Admin Access Request" ¬
+  with prompt "How much time do you need?" ¬
+  default items {"30 minutes"} ¬
+  without multiple selections allowed and empty selection allowed
+if result is false then return "cancel"
+return item 1 of result
+OSASCRIPT
+)
+if [ "$DURATION_CHOICE" = "cancel" ] || [ -z "$DURATION_CHOICE" ]; then
+  echo "$(ts) self-service-request: user cancelled duration selection" >&2
+  exit 0
+fi
+# Extract just the number
+DURATION_MINUTES=$(echo "$DURATION_CHOICE" | grep -oE '^[0-9]+')
+
+# Category picker
+CATEGORY_CHOICE=$(launchctl asuser "$CURRENT_USER_UID" sudo -u "$USERNAME" osascript <<'OSASCRIPT'
+set choices to {"Software Installation", "Debug / Diagnose", "Config / Settings", "Security", "Developer Tools", "Other"}
+set result to choose from list choices ¬
+  with title "Admin Access Request" ¬
+  with prompt "What best describes your reason?" ¬
+  default items {"Software Installation"} ¬
+  without multiple selections allowed and empty selection allowed
+if result is false then return "cancel"
+return item 1 of result
+OSASCRIPT
+)
+if [ "$CATEGORY_CHOICE" = "cancel" ] || [ -z "$CATEGORY_CHOICE" ]; then
+  echo "$(ts) self-service-request: user cancelled category selection" >&2
+  exit 0
+fi
+
+case "$CATEGORY_CHOICE" in
+  "Software Installation") REQUEST_CATEGORY="install" ;;
+  "Debug / Diagnose")      REQUEST_CATEGORY="debug" ;;
+  "Config / Settings")     REQUEST_CATEGORY="config" ;;
+  "Security")              REQUEST_CATEGORY="security" ;;
+  "Developer Tools")       REQUEST_CATEGORY="developer" ;;
+  *)                       REQUEST_CATEGORY="other" ;;
+esac
+
 # ---------------------------------------------------------------------------
 # Build JSON payload
 # ---------------------------------------------------------------------------
@@ -121,13 +166,15 @@ echo "Email (from Directory Services): $EMAIL_SAFE"
 PAYLOAD=$(timeout 5 python3 -c "
 import json, sys
 print(json.dumps({
-    'serial':   sys.argv[1],
-    'hostname': sys.argv[2],
-    'username': sys.argv[3],
-    'reason':   sys.argv[4],
-    'email':    sys.argv[5]
+    'serial':          sys.argv[1],
+    'hostname':        sys.argv[2],
+    'username':        sys.argv[3],
+    'reason':          sys.argv[4],
+    'email':           sys.argv[5],
+    'duration':        int(sys.argv[6]),
+    'requestCategory': sys.argv[7]
 }))
-" "$SERIAL_SAFE" "$HOSTNAME_SAFE" "$USERNAME_SAFE" "$REASON_SAFE" "$EMAIL_SAFE")
+" "$SERIAL_SAFE" "$HOSTNAME_SAFE" "$USERNAME_SAFE" "$REASON_SAFE" "$EMAIL_SAFE" "$DURATION_MINUTES" "$REQUEST_CATEGORY")
 
 if [ $? -ne 0 ] || [ -z "$PAYLOAD" ]; then
   echo "ERROR: Failed to build JSON payload"

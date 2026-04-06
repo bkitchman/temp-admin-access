@@ -4,6 +4,33 @@ const IRU_API_TOKEN = process.env.IRU_API_TOKEN;
 const ELEVATION_TAG = process.env.IRU_ELEVATION_TAG;
 const LOG_COLLECTION_TAG = process.env.IRU_LOG_COLLECTION_TAG;
 
+const ELEVATION_TAG_5MIN  = process.env.IRU_ELEVATION_TAG_5MIN;
+const ELEVATION_TAG_10MIN = process.env.IRU_ELEVATION_TAG_10MIN;
+const ELEVATION_TAG_15MIN = process.env.IRU_ELEVATION_TAG_15MIN;
+const ELEVATION_TAG_30MIN = process.env.IRU_ELEVATION_TAG_30MIN;
+
+const DURATION_TAG_MAP = {
+  5:  ELEVATION_TAG_5MIN,
+  10: ELEVATION_TAG_10MIN,
+  15: ELEVATION_TAG_15MIN,
+  30: ELEVATION_TAG_30MIN,
+};
+
+function getElevationTagForDuration(duration) {
+  const tag = DURATION_TAG_MAP[duration];
+  if (!tag) throw new Error(`No elevation tag configured for duration: ${duration}`);
+  return tag;
+}
+
+async function assignElevationTagForDuration(deviceId, duration) {
+  const tag = getElevationTagForDuration(duration);
+  return addTag(deviceId, tag);
+}
+
+async function removeTagByName(deviceId, tagName) {
+  return removeTag(deviceId, tagName);
+}
+
 function getHeaders() {
   return {
     Authorization: `Bearer ${IRU_API_TOKEN}`,
@@ -134,5 +161,8 @@ module.exports = {
   removeElevationTag,
   assignLogCollectionTag,
   removeLogCollectionTag,
-  lockDevice
+  lockDevice,
+  getElevationTagForDuration,
+  assignElevationTagForDuration,
+  removeTagByName
 };

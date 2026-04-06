@@ -5,7 +5,7 @@ const scheduler = require('../shared/scheduler');
 
 exports.handler = async (event) => {
   // N3-01: extract actor identity forwarded by handleSlackAction for audit logging
-  const { actionId, requestId, actorSlackUserId, actorSlackUsername } = event;
+  const { actionId, requestId, actorSlackUserId, actorSlackUsername, approvedDuration } = event;
 
   if (!requestId || !actionId) {
     console.error('processSlackAction: missing actionId or requestId', event);
@@ -47,8 +47,16 @@ exports.handler = async (event) => {
 
     if (actionId === 'deny_request') {
       await handleDeny(request, requestId, actor);
-    } else if (actionId === 'approve_request') {
-      await handleApprove(request, requestId, actor);
+    } else {
+      const approveMatch = actionId.match(/^approve_(\d+)$/);
+      if (approveMatch) {
+        const resolvedDuration = approvedDuration ?? parseInt(approveMatch[1], 10);
+        if (![5, 10, 15, 30].includes(resolvedDuration)) {
+          console.error(`processSlackAction: invalid duration in actionId: ${actionId}`);
+          return;
+        }
+        await handleApprove(request, requestId, actor, resolvedDuration);
+      }
     }
   } catch (err) {
     console.error('processSlackAction error:', err);
@@ -126,8 +134,9 @@ async function handleRevoke(request, requestId, actor) {
     }
   }
 
-  // Remove elevation tag immediately
-  await iru.removeElevationTag(request.iruDeviceId);
+  // Remove elevation tag immediately (use stored tag name; fall back to 30-min tag for older requests)
+  const tagToRemoveRevoke = request.assignedElevationTag || process.env.IRU_ELEVATION_TAG_30MIN;
+  await iru.removeTagByName(request.iruDeviceId, tagToRemoveRevoke);
 
   // Assign log collection tag — the network monitor on the device detects the
   // revocation via /status polling and calls `iru run` to pick it up immediately.
@@ -183,7 +192,8 @@ async function handleLockDevice(request, requestId, actor) {
   // Remove elevation tag and assign log collection tag.
   // The network monitor on the device detects the revocation via /status polling
   // and calls `iru run` to pick up the log-collection tag immediately.
-  await iru.removeElevationTag(request.iruDeviceId);
+  const tagToRemoveLock = request.assignedElevationTag || process.env.IRU_ELEVATION_TAG_30MIN;
+  await iru.removeTagByName(request.iruDeviceId, tagToRemoveLock);
   await iru.assignLogCollectionTag(request.iruDeviceId);
 
   // Notify thread — DM to user is sent by receiveLog once sudo logs are in hand
@@ -196,7 +206,7 @@ async function handleLockDevice(request, requestId, actor) {
   console.log(`handleLockDevice: device locked for request ${requestId}`);
 }
 
-async function handleApprove(request, requestId, actor) {
+async function handleApprove(request, requestId, actor, approvedDuration) {
   const now = new Date();
 
   // N3-02: conditional write first — only approve if still pending (prevents double-approve race).
@@ -206,6 +216,8 @@ async function handleApprove(request, requestId, actor) {
     await dynamo.updateRequest(requestId, {
       status: 'approved',
       approvedAt: now.toISOString(),
+      approvedDuration,
+      assignedElevationTag: iru.getElevationTagForDuration(approvedDuration),
       ...actor
     }, {
       expression: '#__status = :__pending',
@@ -220,10 +232,10 @@ async function handleApprove(request, requestId, actor) {
     throw err;
   }
 
-  // Assign the elevation tag only after the state transition is committed.
+  // Assign the duration-specific elevation tag only after the state transition is committed.
   // The device-side approval monitor detects approval via /status polling and
   // calls `iru run` directly to pick up the tag immediately.
-  await iru.assignElevationTag(request.iruDeviceId);
+  await iru.assignElevationTagForDuration(request.iruDeviceId, approvedDuration);
 
   const approvedDmNote = request.slackUserId
     ? `DM sent to <@${request.slackUserId}>.`
@@ -233,13 +245,13 @@ async function handleApprove(request, requestId, actor) {
   await slack.postThreadReply(
     request.slackChannelId,
     request.slackThreadTs,
-    `✅ *Approved* — elevation command sent to *${request.deviceHostname}*. 30-minute timer will start when the device confirms elevation. ${approvedDmNote}`
+    `✅ *Approved* — elevation command sent to *${request.deviceHostname}*. ${approvedDuration}-minute timer will start when the device confirms elevation. ${approvedDmNote}`
   );
 
   if (request.slackUserId) {
     await slack.sendDM(
       request.slackUserId,
-      `Your temporary admin access request for *${request.deviceHostname}* was approved. You will be elevated automatically — no action needed.\n\n⏱ *Please allow up to 15–45 minutes* for your device to check in with Iru and apply the change. You'll receive another message here once elevation is confirmed and your 30-minute timer starts.`
+      `Your temporary admin access request for *${request.deviceHostname}* was approved. You will be elevated automatically — no action needed.\n\n⏱ *Please allow up to 15–45 minutes* for your device to check in with Iru and apply the change. You'll receive another message here once elevation is confirmed and your ${approvedDuration}-minute timer starts.`
     );
   }
 }

@@ -61,7 +61,23 @@ Parameters:
   IruElevationTag:
     Type: String
     Default: temp-admin-elevation
-    Description: Iru tag name to assign/remove when granting elevation
+    Description: Iru tag name to assign/remove when granting elevation (legacy single-tag, kept for backward compat)
+  IruElevationTag5Min:
+    Type: String
+    Description: Iru tag that scopes the 5-minute elevation mobileconfig and Library Item
+    Default: temp-admin-elevation-5min
+  IruElevationTag10Min:
+    Type: String
+    Description: Iru tag that scopes the 10-minute elevation mobileconfig and Library Item
+    Default: temp-admin-elevation-10min
+  IruElevationTag15Min:
+    Type: String
+    Description: Iru tag that scopes the 15-minute elevation mobileconfig and Library Item
+    Default: temp-admin-elevation-15min
+  IruElevationTag30Min:
+    Type: String
+    Description: Iru tag that scopes the 30-minute elevation mobileconfig and Library Item
+    Default: temp-admin-elevation-30min
   IruLogCollectionTag:
     Type: String
     Default: temp-admin-log-collection
@@ -223,6 +239,10 @@ Resources:
           SEND_WARNING_FUNCTION_ARN: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:admin-access-sendWarning'
           HANDLE_EXPIRATION_FUNCTION_ARN: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:admin-access-handleExpiration'
           EVENTBRIDGE_ROLE_ARN: !GetAtt EventBridgeSchedulerRole.Arn
+          IRU_ELEVATION_TAG_5MIN: !Ref IruElevationTag5Min
+          IRU_ELEVATION_TAG_10MIN: !Ref IruElevationTag10Min
+          IRU_ELEVATION_TAG_15MIN: !Ref IruElevationTag15Min
+          IRU_ELEVATION_TAG_30MIN: !Ref IruElevationTag30Min
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref RequestsTable
@@ -305,6 +325,12 @@ Resources:
       FunctionName: admin-access-handleExpiration
       Handler: handleExpiration/index.handler
       Description: Removes Iru tag, assigns log collection tag, sends expiry DM
+      Environment:
+        Variables:
+          IRU_ELEVATION_TAG_5MIN: !Ref IruElevationTag5Min
+          IRU_ELEVATION_TAG_10MIN: !Ref IruElevationTag10Min
+          IRU_ELEVATION_TAG_15MIN: !Ref IruElevationTag15Min
+          IRU_ELEVATION_TAG_30MIN: !Ref IruElevationTag30Min
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref RequestsTable
@@ -327,6 +353,12 @@ Resources:
       FunctionName: admin-access-revokeNetworkLoss
       Handler: revokeNetworkLoss/index.handler
       Description: Records network-loss revocation, assigns log collection tag, notifies Slack
+      Environment:
+        Variables:
+          IRU_ELEVATION_TAG_5MIN: !Ref IruElevationTag5Min
+          IRU_ELEVATION_TAG_10MIN: !Ref IruElevationTag10Min
+          IRU_ELEVATION_TAG_15MIN: !Ref IruElevationTag15Min
+          IRU_ELEVATION_TAG_30MIN: !Ref IruElevationTag30Min
       Events:
         Api:
           Type: Api

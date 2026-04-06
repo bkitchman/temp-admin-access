@@ -70,21 +70,46 @@ function verifySlackSignature(headers, rawBody) {
 }
 
 const CATEGORY_DISPLAY = {
-  install:  '📦 Install / Software',
-  debug:    '🔍 Debug / Diagnose',
-  config:   '⚙️ Config / Settings',
-  security: '🔒 Security',
-  other:    '📝 Other'
+  install:   '📦 Install / Software',
+  debug:     '🔍 Debug / Diagnose',
+  config:    '⚙️ Config / Settings',
+  security:  '🔒 Security',
+  developer: '🛠 Developer Tools',
+  other:     '📝 Other'
 };
 
 // Post interactive approval message to IT channel
 // Returns { channel, ts } to store as the thread anchor
-async function postApprovalMessage({ requestId, username, hostname, serial, reason, reasonCategory }) {
+async function postApprovalMessage({ requestId, username, hostname, serial, reason, reasonCategory, duration }) {
   const safeUsername = escapeSlack(username);
   const safeHostname = escapeSlack(hostname);
   const safeSerial = escapeSlack(serial);
   const safeReason = escapeSlack(reason);
   const categoryLabel = CATEGORY_DISPLAY[reasonCategory] || CATEGORY_DISPLAY.other;
+
+  // Generate the 4 approval duration buttons
+  const DURATIONS = [5, 10, 15, 30];
+  const approvalButtons = DURATIONS.map(d => ({
+    type: 'button',
+    text: { type: 'plain_text', text: `✅ ${d} min`, emoji: true },
+    style: d === duration ? 'primary' : undefined,
+    action_id: `approve_${d}`,
+    value: requestId,
+    confirm: {
+      title: { type: 'plain_text', text: 'Approve Access?' },
+      text: { type: 'mrkdwn', text: `Grant *${safeUsername}* temporary admin on *${safeHostname}* for *${d} minutes*?` },
+      confirm: { type: 'plain_text', text: 'Approve' },
+      deny: { type: 'plain_text', text: 'Cancel' }
+    }
+  }));
+
+  const denyButton = {
+    type: 'button',
+    text: { type: 'plain_text', text: '❌ Deny', emoji: true },
+    style: 'danger',
+    action_id: 'deny_request',
+    value: requestId
+  };
 
   const data = await slackRequest('POST', '/chat.postMessage', {
     channel: IT_CHANNEL_ID,
@@ -104,6 +129,10 @@ async function postApprovalMessage({ requestId, username, hostname, serial, reas
         ]
       },
       {
+        type: 'section',
+        text: { type: 'mrkdwn', text: `*Requested Duration:*\n⏱ ${duration} minutes` }
+      },
+      {
         // N6-04: plain_text prevents mrkdwn formatting injection (*bold*, _italic_, <URL|text>)
         // safeReason is still escaped for defense-in-depth
         type: 'section',
@@ -112,28 +141,7 @@ async function postApprovalMessage({ requestId, username, hostname, serial, reas
       { type: 'divider' },
       {
         type: 'actions',
-        elements: [
-          {
-            type: 'button',
-            text: { type: 'plain_text', text: '✅ Approve', emoji: true },
-            style: 'primary',
-            action_id: 'approve_request',
-            value: requestId,
-            confirm: {
-              title: { type: 'plain_text', text: 'Approve Access?' },
-              text: { type: 'mrkdwn', text: `Grant *${safeUsername}* temporary admin on *${safeHostname}* for 30 minutes?` },
-              confirm: { type: 'plain_text', text: 'Approve' },
-              deny: { type: 'plain_text', text: 'Cancel' }
-            }
-          },
-          {
-            type: 'button',
-            text: { type: 'plain_text', text: '❌ Deny', emoji: true },
-            style: 'danger',
-            action_id: 'deny_request',
-            value: requestId
-          }
-        ]
+        elements: [...approvalButtons, denyButton]
       }
     ]
   });

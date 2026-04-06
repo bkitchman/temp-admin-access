@@ -59,23 +59,31 @@ exports.handler = async (event) => {
     // 4. Use now as the true elevation start time — this is when the device confirmed elevation
     const now = new Date();
     const elevationStartTime = now.toISOString();
-    const warningTime = new Date(now.getTime() + 25 * 60 * 1000);
-    const expirationTime = new Date(now.getTime() + 30 * 60 * 1000);
+
+    // Use the admin-approved duration stored at approval time; default to 30 for older requests
+    const approvedDuration = request.approvedDuration || 30;
+    const warningMinutes = Math.max(approvedDuration - 5, 1); // At least 1 min for 5-min sessions
+    const warningTime = new Date(now.getTime() + warningMinutes * 60 * 1000);
+    const expirationTime = new Date(now.getTime() + approvedDuration * 60 * 1000);
     const elevationEndTime = expirationTime.toISOString();
 
-    // 5. Create EventBridge schedules from actual elevation start time
-    const warningSchedulerArn = await scheduler.createOneTimeSchedule({
-      name: `warning-${requestId}`,
-      invokeAt: warningTime.toISOString(),
-      targetLambdaArn: process.env.SEND_WARNING_FUNCTION_ARN,
-      payload: { requestId }
-    });
+    // 5. Create EventBridge schedules from actual elevation start time.
+    // Skip the warning schedule for 5-minute sessions — a T+0 warning is not meaningful.
+    let warningSchedulerArn = null;
+    if (approvedDuration > 5) {
+      warningSchedulerArn = await scheduler.createOneTimeSchedule({
+        name: `warning-${requestId}`,
+        invokeAt: warningTime.toISOString(),
+        targetLambdaArn: process.env.SEND_WARNING_FUNCTION_ARN,
+        payload: { requestId }
+      });
+    }
 
     const expirationSchedulerArn = await scheduler.createOneTimeSchedule({
       name: `expiration-${requestId}`,
       invokeAt: expirationTime.toISOString(),
       targetLambdaArn: process.env.HANDLE_EXPIRATION_FUNCTION_ARN,
-      payload: { requestId, elevationStartTime, elevationEndTime }
+      payload: { requestId, elevationStartTime, elevationEndTime, approvedDuration }
     });
 
     // 6. Update DynamoDB with actual times and scheduler ARNs.

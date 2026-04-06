@@ -10,10 +10,11 @@ const lambdaClient = new LambdaClient({});
 // Classify request reason into a category for IT visibility and trend analysis.
 // N6-03: use .includes() instead of regex — avoids ReDoS on untrusted input.
 const REASON_KEYWORDS = {
-  install:  ['install', 'package', 'brew', 'npm', 'pip', '.dmg', '.pkg', 'software', 'upgrade', 'download'],
-  debug:    ['debug', 'diagnose', 'troubleshoot', 'investigate', 'error', 'crash', 'trace', 'analyze'],
-  config:   ['config', 'configure', 'setting', 'preference', 'permission', 'setup', 'network', 'certificate'],
-  security: ['security', 'scan', 'pentest', 'audit', 'firewall', 'vpn']
+  install:   ['install', 'package', 'brew', 'npm', 'pip', '.dmg', '.pkg', 'software', 'upgrade', 'download'],
+  debug:     ['debug', 'diagnose', 'troubleshoot', 'investigate', 'error', 'crash', 'trace', 'analyze'],
+  config:    ['config', 'configure', 'setting', 'preference', 'permission', 'setup', 'network', 'certificate'],
+  security:  ['security', 'scan', 'pentest', 'audit', 'firewall', 'vpn'],
+  developer: ['docker', 'xcode', 'homebrew', 'sdk', 'toolchain', 'compiler', 'runtime', 'framework']
 };
 function classifyReason(reason) {
   const text = reason.toLowerCase();
@@ -55,7 +56,7 @@ exports.handler = async (event) => {
       return respond(400, { error: 'Invalid JSON body' });
     }
 
-    const { serial, hostname, username, reason, email } = body;
+    const { serial, hostname, username, reason, email, duration, requestCategory } = body;
     if (!serial || !hostname || !username || !reason) {
       return respond(400, { error: 'Missing required fields: serial, hostname, username, reason' });
     }
@@ -78,8 +79,18 @@ exports.handler = async (event) => {
       return respond(400, { error: 'Invalid email format' });
     }
 
-    // Classify reason for IT visibility and trend analysis
-    const reasonCategory = classifyReason(reason);
+    // Validate duration
+    const ALLOWED_DURATIONS = [5, 10, 15, 30];
+    const parsedDuration = parseInt(duration, 10);
+    if (!duration || !ALLOWED_DURATIONS.includes(parsedDuration)) {
+      return respond(400, { error: 'duration must be one of: 5, 10, 15, 30' });
+    }
+
+    // Classify reason — use caller-provided category if valid, otherwise auto-classify
+    const ALLOWED_CATEGORIES = ['install', 'debug', 'config', 'security', 'developer', 'other'];
+    const reasonCategory = (requestCategory && ALLOWED_CATEGORIES.includes(requestCategory))
+      ? requestCategory
+      : classifyReason(reason);
 
     // 3. Look up device in Iru by serial number
     const device = await iru.getDeviceBySerial(serial);
@@ -99,7 +110,8 @@ exports.handler = async (event) => {
       hostname,
       serial,
       reason,
-      reasonCategory
+      reasonCategory,
+      duration: parsedDuration
     });
 
     // 7. Persist the request in DynamoDB with status: pending
@@ -115,6 +127,7 @@ exports.handler = async (event) => {
       requestingUser: username,
       reason,
       reasonCategory,
+      requestedDuration: parsedDuration,
       status: 'pending',
       createdAt: new Date().toISOString(),
       ttl: Math.floor(Date.now() / 1000) + 90 * 24 * 60 * 60  // 90 days from now
@@ -139,10 +152,11 @@ exports.handler = async (event) => {
           FunctionName: processSlackActionArn,
           InvocationType: 'Event',
           Payload: JSON.stringify({
-            actionId: 'approve_request',
+            actionId: `approve_${parsedDuration}`,
             requestId,
             actorSlackUserId: onCallUserId,
-            actorSlackUsername: process.env.ON_CALL_SLACK_USERNAME || 'On-Call IT Admin'
+            actorSlackUsername: process.env.ON_CALL_SLACK_USERNAME || 'On-Call IT Admin',
+            approvedDuration: parsedDuration
           })
         }));
       } catch (err) {
