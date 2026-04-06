@@ -107,13 +107,13 @@ fi
 # Duration picker
 DURATION_CHOICE=$(launchctl asuser "$CURRENT_USER_UID" sudo -u "$USERNAME" osascript <<'OSASCRIPT'
 set choices to {"5 minutes", "10 minutes", "15 minutes", "30 minutes"}
-set result to choose from list choices ¬
+set theChoice to choose from list choices ¬
   with title "Admin Access Request" ¬
   with prompt "How much time do you need?" ¬
   default items {"30 minutes"} ¬
   without multiple selections allowed and empty selection allowed
-if result is false then return "cancel"
-return item 1 of result
+if theChoice is false then return "cancel"
+return item 1 of theChoice
 OSASCRIPT
 )
 if [ "$DURATION_CHOICE" = "cancel" ] || [ -z "$DURATION_CHOICE" ]; then
@@ -130,13 +130,13 @@ fi
 # Category picker
 CATEGORY_CHOICE=$(launchctl asuser "$CURRENT_USER_UID" sudo -u "$USERNAME" osascript <<'OSASCRIPT'
 set choices to {"Software Installation", "Debug / Diagnose", "Config / Settings", "Security", "Developer Tools", "Other"}
-set result to choose from list choices ¬
+set theChoice to choose from list choices ¬
   with title "Admin Access Request" ¬
   with prompt "What best describes your reason?" ¬
   default items {"Software Installation"} ¬
   without multiple selections allowed and empty selection allowed
-if result is false then return "cancel"
-return item 1 of result
+if theChoice is false then return "cancel"
+return item 1 of theChoice
 OSASCRIPT
 )
 if [ "$CATEGORY_CHOICE" = "cancel" ] || [ -z "$CATEGORY_CHOICE" ]; then
