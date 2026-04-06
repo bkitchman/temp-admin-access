@@ -341,7 +341,7 @@ fi
 ts() { date '+%Y-%m-%d %H:%M:%S'; }
 
 check_network() {
-  ping -c 3 -t 2 8.8.8.8 &>/dev/null
+  curl -s --max-time 5 -o /dev/null -w "%{http_code}" https://captive.apple.com 2>/dev/null | grep -q "."
 }
 
 revoke_admin() {

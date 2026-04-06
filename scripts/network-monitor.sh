@@ -10,9 +10,7 @@ LOG_TAG="admin-network-monitor"
 
 # Check network connectivity by pinging a reliable internal or public host
 check_network() {
-  # Try pinging 8.8.8.8 three times with a 2 second timeout each
-  ping -c 3 -t 2 8.8.8.8 &>/dev/null
-  return $?
+  curl -s --max-time 5 -o /dev/null -w "%{http_code}" https://captive.apple.com 2>/dev/null | grep -q "."
 }
 
 # Get the currently logged-in user
