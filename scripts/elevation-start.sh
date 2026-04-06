@@ -263,8 +263,8 @@ release_kandji_run_lock() {
   rm -f "\$KANDJI_RUN_LOCK"
 }
 
-echo "\$(ts) expiration-runner: waiting 30s for log-collection tag propagation..."
-sleep 30
+echo "\$(ts) expiration-runner: waiting 5s for log-collection tag propagation..."
+sleep 5
 acquire_kandji_run_lock
 trap '' TERM
 echo "\$(ts) expiration-runner: running kandji run..."
@@ -458,18 +458,18 @@ if [ -n "\$REQUEST_ID" ] && [ -n "\$STATUS_ENDPOINT" ]; then
         # Ignore SIGTERM during kandji run — cleanup_daemon calls launchctl unload
         # which sends SIGTERM to this process and would kill kandji run mid-execution.
         trap '' TERM
-        echo "\$(ts) \$LOG_TAG: waiting 30s for log-collection tag propagation..."
-        sleep 30
+        echo "\$(ts) \$LOG_TAG: waiting 5s for log-collection tag propagation..."
+        sleep 5
         acquire_kandji_run_lock
         echo "\$(ts) \$LOG_TAG: running kandji run to pick up log-collection tag..."
         /usr/local/bin/kandji run --reset-daily >> /var/log/kandji-elevation.log 2>&1
         echo "\$(ts) \$LOG_TAG: kandji run exited with code \$?"
         release_kandji_run_lock
-        # Verify revocation took effect — retry once after 120s if user is still admin
+        # Verify revocation took effect — retry once after 30s if user is still admin
         IS_ADMIN=\$(dseditgroup -o checkmember -m "\$CURRENT_USER" admin 2>/dev/null | grep -c "yes")
         if [ "\$IS_ADMIN" -gt 0 ]; then
-          echo "\$(ts) \$LOG_TAG: admin not yet removed after first kandji run — waiting 120s before retry..."
-          sleep 120
+          echo "\$(ts) \$LOG_TAG: admin not yet removed after first kandji run — waiting 30s before retry..."
+          sleep 30
           acquire_kandji_run_lock
           echo "\$(ts) \$LOG_TAG: retry kandji run (revocation not yet confirmed)..."
           /usr/local/bin/kandji run --reset-daily >> /var/log/kandji-elevation.log 2>&1

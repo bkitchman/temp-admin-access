@@ -333,18 +333,18 @@ case "\$HTTP_CODE" in
       # which sends SIGTERM to this process. Without the trap, the signal can arrive
       # mid-kandji-run and kill it before it finishes processing the elevation tag.
       trap '' TERM
-      echo "\$(ts) approval-monitor: waiting 30s for Kandji tag propagation..."
-      sleep 30
+      echo "\$(ts) approval-monitor: waiting 5s for Kandji tag propagation..."
+      sleep 5
       acquire_kandji_run_lock
       echo "\$(ts) approval-monitor: running kandji run..."
       /usr/local/bin/kandji run --reset-daily >> /var/log/kandji-elevation.log 2>&1
       echo "\$(ts) approval-monitor: kandji run exited with code \$?"
       release_kandji_run_lock
-      # Verify elevation took effect — retry once after 120s if not yet admin
+      # Verify elevation took effect — retry once after 30s if not yet admin
       IS_ADMIN=\$(dseditgroup -o checkmember -m "\$USERNAME" admin 2>/dev/null | grep -c "yes")
       if [ "\$IS_ADMIN" -eq 0 ]; then
-        echo "\$(ts) approval-monitor: elevation not confirmed after first kandji run — waiting 120s before retry..."
-        sleep 120
+        echo "\$(ts) approval-monitor: elevation not confirmed after first kandji run — waiting 30s before retry..."
+        sleep 30
         acquire_kandji_run_lock
         echo "\$(ts) approval-monitor: retry kandji run (elevation not yet confirmed)..."
         /usr/local/bin/kandji run --reset-daily >> /var/log/kandji-elevation.log 2>&1
