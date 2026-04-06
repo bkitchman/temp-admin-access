@@ -1,4 +1,4 @@
-const kandji = require('../shared/kandji');
+const iru = require('../shared/iru');
 const slack = require('../shared/slack');
 const dynamo = require('../shared/dynamo');
 const scheduler = require('../shared/scheduler');
@@ -127,11 +127,11 @@ async function handleRevoke(request, requestId, actor) {
   }
 
   // Remove elevation tag immediately
-  await kandji.removeElevationTag(request.kandjiDeviceId);
+  await iru.removeElevationTag(request.iruDeviceId);
 
   // Assign log collection tag — the network monitor on the device detects the
-  // revocation via /status polling and calls `kandji run` to pick it up immediately.
-  await kandji.assignLogCollectionTag(request.kandjiDeviceId);
+  // revocation via /status polling and calls `iru run` to pick it up immediately.
+  await iru.assignLogCollectionTag(request.iruDeviceId);
 
   // Update Slack thread — DM to user is sent by receiveLog once sudo logs are in hand
   await slack.postThreadReply(
@@ -178,13 +178,13 @@ async function handleLockDevice(request, requestId, actor) {
   }
 
   // Lock device via MDM
-  await kandji.lockDevice(request.kandjiDeviceId);
+  await iru.lockDevice(request.iruDeviceId);
 
   // Remove elevation tag and assign log collection tag.
   // The network monitor on the device detects the revocation via /status polling
-  // and calls `kandji run` to pick up the log-collection tag immediately.
-  await kandji.removeElevationTag(request.kandjiDeviceId);
-  await kandji.assignLogCollectionTag(request.kandjiDeviceId);
+  // and calls `iru run` to pick up the log-collection tag immediately.
+  await iru.removeElevationTag(request.iruDeviceId);
+  await iru.assignLogCollectionTag(request.iruDeviceId);
 
   // Notify thread — DM to user is sent by receiveLog once sudo logs are in hand
   await slack.postThreadReply(
@@ -200,7 +200,7 @@ async function handleApprove(request, requestId, actor) {
   const now = new Date();
 
   // N3-02: conditional write first — only approve if still pending (prevents double-approve race).
-  // N11-02: DynamoDB write must succeed before assigning the Kandji tag. If we tag first and the
+  // N11-02: DynamoDB write must succeed before assigning the Iru tag. If we tag first and the
   // write races, the device is elevated but the session is untracked and will never expire.
   try {
     await dynamo.updateRequest(requestId, {
@@ -214,7 +214,7 @@ async function handleApprove(request, requestId, actor) {
     });
   } catch (err) {
     if (err.name === 'ConditionalCheckFailedException') {
-      console.warn(`handleApprove: request ${requestId} already processed (race condition), skipping Kandji tag`);
+      console.warn(`handleApprove: request ${requestId} already processed (race condition), skipping Iru tag`);
       return;
     }
     throw err;
@@ -222,8 +222,8 @@ async function handleApprove(request, requestId, actor) {
 
   // Assign the elevation tag only after the state transition is committed.
   // The device-side approval monitor detects approval via /status polling and
-  // calls `kandji run` directly to pick up the tag immediately.
-  await kandji.assignElevationTag(request.kandjiDeviceId);
+  // calls `iru run` directly to pick up the tag immediately.
+  await iru.assignElevationTag(request.iruDeviceId);
 
   const approvedDmNote = request.slackUserId
     ? `DM sent to <@${request.slackUserId}>.`
@@ -239,7 +239,7 @@ async function handleApprove(request, requestId, actor) {
   if (request.slackUserId) {
     await slack.sendDM(
       request.slackUserId,
-      `Your temporary admin access request for *${request.deviceHostname}* was approved. You will be elevated automatically — no action needed.\n\n⏱ *Please allow up to 15–45 minutes* for your device to check in with Kandji and apply the change. You'll receive another message here once elevation is confirmed and your 30-minute timer starts.`
+      `Your temporary admin access request for *${request.deviceHostname}* was approved. You will be elevated automatically — no action needed.\n\n⏱ *Please allow up to 15–45 minutes* for your device to check in with Iru and apply the change. You'll receive another message here once elevation is confirmed and your 30-minute timer starts.`
     );
   }
 }

@@ -2,7 +2,7 @@ AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: >
   Temporary Local Admin Access Workflow
-  Kandji Self Service → Slack approval → SAP Privileges elevation → EventBridge auto-expiry
+  Iru Self Service → Slack approval → SAP Privileges elevation → EventBridge auto-expiry
 
 # ---------------------------------------------------------------------------
 # Globals applied to all Lambda functions
@@ -27,10 +27,10 @@ Globals:
         SLACK_BOT_TOKEN: !Ref SlackBotToken
         SLACK_SIGNING_SECRET: !Ref SlackSigningSecret
         SLACK_IT_CHANNEL_ID: !Ref SlackItChannelId
-        KANDJI_API_TOKEN: !Ref KandjiApiToken
-        KANDJI_BASE_URL: !Ref KandjiBaseUrl
-        KANDJI_ELEVATION_TAG: !Ref KandjiElevationTag
-        KANDJI_LOG_COLLECTION_TAG: !Ref KandjiLogCollectionTag
+        IRU_API_TOKEN: !Ref IruApiToken
+        IRU_BASE_URL: !Ref IruBaseUrl
+        IRU_ELEVATION_TAG: !Ref IruElevationTag
+        IRU_LOG_COLLECTION_TAG: !Ref IruLogCollectionTag
         DYNAMODB_TABLE_NAME: !Ref RequestsTable
         SELF_SERVICE_API_KEY: !Ref SelfServiceApiKey
         EMAIL_DOMAIN: !Ref EmailDomain
@@ -51,21 +51,21 @@ Parameters:
   SlackItChannelId:
     Type: String
     Description: Slack channel ID for IT admin approval messages (e.g. C012AB3CD)
-  KandjiApiToken:
+  IruApiToken:
     Type: String
     NoEcho: true
-    Description: Kandji API bearer token
-  KandjiBaseUrl:
+    Description: Iru API bearer token
+  IruBaseUrl:
     Type: String
-    Description: Kandji tenant API base URL (e.g. https://yourorg.api.kandji.io)
-  KandjiElevationTag:
+    Description: Iru tenant API base URL (e.g. https://yourorg.api.iru.io)
+  IruElevationTag:
     Type: String
     Default: temp-admin-elevation
-    Description: Kandji tag name to assign/remove when granting elevation
-  KandjiLogCollectionTag:
+    Description: Iru tag name to assign/remove when granting elevation
+  IruLogCollectionTag:
     Type: String
     Default: temp-admin-log-collection
-    Description: Kandji tag name to assign on expiration — triggers collect-sudo-log.sh
+    Description: Iru tag name to assign on expiration — triggers collect-sudo-log.sh
   SelfServiceApiKey:
     Type: String
     NoEcho: true
@@ -209,7 +209,7 @@ Resources:
 
   # -------------------------------------------------------------------------
   # Lambda: processSlackAction  (invoked async by handleSlackAction)
-  # Does all the heavy work — Kandji, EventBridge scheduling, DynamoDB, Slack
+  # Does all the heavy work — Iru, EventBridge scheduling, DynamoDB, Slack
   # -------------------------------------------------------------------------
   ProcessSlackActionFunction:
     Type: AWS::Serverless::Function
@@ -217,7 +217,7 @@ Resources:
     Properties:
       FunctionName: admin-access-processSlackAction
       Handler: processSlackAction/index.handler
-      Description: Processes Slack approve/deny/revoke — Kandji tags, EventBridge schedules, DynamoDB, Slack replies
+      Description: Processes Slack approve/deny/revoke — Iru tags, EventBridge schedules, DynamoDB, Slack replies
       Environment:
         Variables:
           SEND_WARNING_FUNCTION_ARN: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:admin-access-sendWarning'
@@ -304,7 +304,7 @@ Resources:
     Properties:
       FunctionName: admin-access-handleExpiration
       Handler: handleExpiration/index.handler
-      Description: Removes Kandji tag, assigns log collection tag, sends expiry DM
+      Description: Removes Iru tag, assigns log collection tag, sends expiry DM
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref RequestsTable

@@ -44,8 +44,8 @@ This prompts for all parameter values and saves them to `samconfig.toml`. At min
 | `SlackBotToken` | Slack app OAuth & Permissions → Bot Token |
 | `SlackSigningSecret` | Slack app Basic Information → App Credentials |
 | `SlackItChannelId` | Right-click channel in Slack → View channel details |
-| `KandjiApiToken` | Kandji Settings → Access → API Token |
-| `KandjiBaseUrl` | Kandji Settings → Access → API URL |
+| `IruApiToken` | Iru Settings → Access → API Token |
+| `IruBaseUrl` | Iru Settings → Access → API URL |
 | `SelfServiceApiKey` | Generate a random string: `openssl rand -hex 32` |
 | `EmailDomain` | Your company's email domain, e.g. `company.com` |
 
@@ -60,8 +60,8 @@ aws ssm put-parameter --name /admin-access/slack-bot-token \
 aws ssm put-parameter --name /admin-access/slack-signing-secret \
   --value "your-signing-secret" --type SecureString
 
-aws ssm put-parameter --name /admin-access/kandji-api-token \
-  --value "your-kandji-token" --type SecureString
+aws ssm put-parameter --name /admin-access/iru-api-token \
+  --value "your-iru-token" --type SecureString
 
 aws ssm put-parameter --name /admin-access/self-service-api-key \
   --value "$(openssl rand -hex 32)" --type SecureString
@@ -124,7 +124,7 @@ The SAM template creates:
 | `admin-access-eventbridge-scheduler-role` | IAM Role | Allows EventBridge Scheduler to invoke `sendWarning` and `handleExpiration` |
 | `admin-access-handleRequest` | Lambda | Receives Self Service POST, posts Slack approval |
 | `admin-access-handleSlackAction` | Lambda | Verifies Slack signature, async-invokes processSlackAction |
-| `admin-access-processSlackAction` | Lambda | Approve/deny/revoke logic, Kandji tags, EventBridge schedules |
+| `admin-access-processSlackAction` | Lambda | Approve/deny/revoke logic, Iru tags, EventBridge schedules |
 | `admin-access-handleElevationStart` | Lambda | Starts 30-min timer when device confirms elevation |
 | `admin-access-sendWarning` | Lambda | Sends 5-minute warning DM (EventBridge T+25) |
 | `admin-access-handleExpiration` | Lambda | Removes tag, assigns log-collection tag (EventBridge T+30) |

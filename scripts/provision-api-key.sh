@@ -1,5 +1,5 @@
 #!/bin/bash
-# Kandji Library Custom Script — Provision API Key
+# Iru Library Custom Script — Provision API Key
 # Scope: All devices (run once at enrollment)
 # Run: At install
 #
@@ -7,12 +7,12 @@
 # Only root processes can retrieve it — standard and admin users cannot.
 
 KEYCHAIN="/Library/Keychains/System.keychain"
-SERVICE="kandji-temp-admin-api"
-ACCOUNT="kandji-temp-admin"
+SERVICE="iru-temp-admin-api"
+ACCOUNT="iru-temp-admin"
 API_KEY="YOUR_API_KEY_HERE"
 
 if [ "$API_KEY" = "YOUR_API_KEY_HERE" ] || [ -z "$API_KEY" ]; then
-  echo "provision-api-key: ERROR — API_KEY has not been set. Replace YOUR_API_KEY_HERE with your SelfServiceApiKey value before uploading to Kandji." >&2
+  echo "provision-api-key: ERROR — API_KEY has not been set. Replace YOUR_API_KEY_HERE with your SelfServiceApiKey value before uploading to Iru." >&2
   exit 1
 fi
 
@@ -23,7 +23,7 @@ security delete-generic-password \
   "$KEYCHAIN" 2>/dev/null
 
 # Store the key — -T /usr/bin/security allows the security binary to retrieve it
-# non-interactively (required for Kandji scripts running without a GUI session).
+# non-interactively (required for Iru scripts running without a GUI session).
 # The System keychain is root-only, so standard users still cannot access it.
 security add-generic-password \
   -a "$ACCOUNT" \

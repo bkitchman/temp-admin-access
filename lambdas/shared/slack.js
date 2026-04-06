@@ -310,7 +310,7 @@ async function uploadLogToThread(channel, ts, filename, content) {
   return completeData;
 }
 
-// Resolve a Slack user ID directly from an email address (e.g. from Kandji $EMAIL variable).
+// Resolve a Slack user ID directly from an email address (e.g. from Iru $EMAIL variable).
 // Requires the bot token to have the users:read.email OAuth scope.
 async function lookupSlackUserByEmail(email) {
   try {

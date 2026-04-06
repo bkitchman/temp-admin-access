@@ -1,5 +1,5 @@
 #!/bin/bash
-# Kandji Library Custom Script — Collect Sudo Log
+# Iru Library Custom Script — Collect Sudo Log
 # Scope to tag: temp-admin-log-collection
 # Run: At install (i.e. when the log collection tag is assigned on expiration)
 umask 077  # ensure mktemp files are always 0600 regardless of calling environment
@@ -14,12 +14,12 @@ if ! command -v timeout &>/dev/null; then
 fi
 
 API_ENDPOINT="https://1mng27frfb.execute-api.us-east-1.amazonaws.com/Prod/log"
-API_KEY=$(security find-generic-password -a "kandji-temp-admin" -s "kandji-temp-admin-api" -w /Library/Keychains/System.keychain 2>/dev/null)
+API_KEY=$(security find-generic-password -a "iru-temp-admin" -s "iru-temp-admin-api" -w /Library/Keychains/System.keychain 2>/dev/null)
 if [ -z "$API_KEY" ]; then
   echo "$(ts) collect-sudo-log: ERROR — API key not found in system keychain" >&2
   exit 1
 fi
-META_FILE="/var/root/.kandji-elevation/meta.json"
+META_FILE="/var/root/.iru-elevation/meta.json"
 
 ts() { date '+%Y-%m-%d %H:%M:%S'; }
 
@@ -68,8 +68,8 @@ fi
 # Remove sudoers drop-in immediately — stops any further sudo logging
 # so the log is frozen before we read it
 # ---------------------------------------------------------------------------
-SUDO_LOG="/var/log/kandji-sudo-elevation.log"
-SUDOERS_DROP_IN="/etc/sudoers.d/kandji-elevation-logging"
+SUDO_LOG="/var/log/iru-sudo-elevation.log"
+SUDOERS_DROP_IN="/etc/sudoers.d/iru-elevation-logging"
 
 if [ -f "$SUDOERS_DROP_IN" ]; then
   rm -f "$SUDOERS_DROP_IN"
@@ -228,16 +228,16 @@ if [ "$HTTP_STATUS" = "200" ]; then
   # Clean up approval monitor LaunchDaemon if still present (edge case: session
   # expired or was force-revoked while approval monitor was still polling)
   APPROVAL_PLIST="/Library/LaunchDaemons/com.kitchman.admin-approval-monitor.plist"
-  APPROVAL_SCRIPT="/usr/local/bin/kandji-approval-monitor.sh"
+  APPROVAL_SCRIPT="/usr/local/bin/iru-approval-monitor.sh"
   if [ -f "$APPROVAL_PLIST" ]; then
     launchctl unload "$APPROVAL_PLIST" 2>/dev/null
-    rm -f "$APPROVAL_PLIST" "$APPROVAL_SCRIPT" /var/tmp/kandji-approval-attempt
+    rm -f "$APPROVAL_PLIST" "$APPROVAL_SCRIPT" /var/tmp/iru-approval-attempt
     echo "$(ts) collect-sudo-log: approval monitor LaunchDaemon removed"
   fi
 
   # Clean up network monitor LaunchDaemon if still present
   NETWORK_PLIST="/Library/LaunchDaemons/com.kitchman.admin-network-monitor.plist"
-  NETWORK_SCRIPT="/usr/local/bin/kandji-admin-network-monitor.sh"
+  NETWORK_SCRIPT="/usr/local/bin/iru-admin-network-monitor.sh"
   if [ -f "$NETWORK_PLIST" ]; then
     launchctl unload "$NETWORK_PLIST" 2>/dev/null
     rm -f "$NETWORK_PLIST"
@@ -247,7 +247,7 @@ if [ "$HTTP_STATUS" = "200" ]; then
 
   # Clean up expiration runner LaunchDaemon and script if still present
   RUNNER_PLIST="/Library/LaunchDaemons/com.kitchman.admin-expiration-runner.plist"
-  RUNNER_SCRIPT="/usr/local/bin/kandji-expiration-runner.sh"
+  RUNNER_SCRIPT="/usr/local/bin/iru-expiration-runner.sh"
   if [ -f "$RUNNER_PLIST" ]; then
     launchctl unload "$RUNNER_PLIST" 2>/dev/null
     rm -f "$RUNNER_PLIST"
@@ -255,8 +255,8 @@ if [ "$HTTP_STATUS" = "200" ]; then
   fi
   rm -f "$RUNNER_SCRIPT" 2>/dev/null
 
-  # Release the kandji run lock if we're cleaning up mid-run
-  rm -f /var/run/kandji-run.lock 2>/dev/null
+  # Release the iru run lock if we're cleaning up mid-run
+  rm -f /var/run/iru-run.lock 2>/dev/null
 else
   echo "$(ts) collect-sudo-log: upload failed with HTTP $HTTP_STATUS" >&2
   exit 1

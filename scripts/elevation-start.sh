@@ -1,5 +1,5 @@
 #!/bin/bash
-# Kandji Library Custom Script — Elevation Start
+# Iru Library Custom Script — Elevation Start
 # Scope to tag: temp-admin-elevation
 # Run: At install (i.e. when the tag is assigned to the device)
 #
@@ -13,7 +13,7 @@ if ! command -v timeout &>/dev/null; then
   timeout() { local _t=$1; shift; "$@"; }
 fi
 
-META_DIR="/var/root/.kandji-elevation"
+META_DIR="/var/root/.iru-elevation"
 META_FILE="$META_DIR/meta.json"
 PRIVILEGES_CLI="/Applications/Privileges.app/Contents/MacOS/PrivilegesCLI"
 
@@ -29,7 +29,7 @@ START_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 update_meta() {
   local key="$1" value="$2"
   local tmp
-  tmp=$(mktemp /tmp/kandji-meta-XXXXXX) || return 1
+  tmp=$(mktemp /tmp/iru-meta-XXXXXX) || return 1
   chmod 600 "$tmp"
   timeout 5 python3 -c "
 import json, sys
@@ -48,7 +48,7 @@ with open(sys.argv[4], 'w') as f:
 update_meta 'elevationStart' "$START_TIME"
 echo "elevation-start: recorded start time $START_TIME"
 
-# Store $EMAIL from Kandji global variable into metadata — Library Items receive globals,
+# Store $EMAIL from Iru global variable into metadata — Library Items receive globals,
 # Self Service scripts do not, so this is the reliable place to capture it
 if [ -n "$EMAIL" ]; then
   update_meta 'email' "$EMAIL" 2>/dev/null
@@ -94,8 +94,8 @@ fi
 # ---------------------------------------------------------------------------
 # Enable sudo command logging for the duration of this elevation window
 # ---------------------------------------------------------------------------
-SUDO_LOG="/var/log/kandji-sudo-elevation.log"
-SUDOERS_DROP_IN="/etc/sudoers.d/kandji-elevation-logging"
+SUDO_LOG="/var/log/iru-sudo-elevation.log"
+SUDOERS_DROP_IN="/etc/sudoers.d/iru-elevation-logging"
 
 # Verify /etc/sudoers includes the sudoers.d directory
 if grep -qE '#includedir.*/sudoers\.d' /etc/sudoers 2>/dev/null; then
@@ -116,7 +116,7 @@ echo "elevation-start: drop-in content: $(cat "$SUDOERS_DROP_IN")"
 # Notify backend that elevation is confirmed — this starts the 30-min timer
 # ---------------------------------------------------------------------------
 API_ENDPOINT="https://1mng27frfb.execute-api.us-east-1.amazonaws.com/Prod/start"
-API_KEY=$(security find-generic-password -a "kandji-temp-admin" -s "kandji-temp-admin-api" -w /Library/Keychains/System.keychain 2>/dev/null)
+API_KEY=$(security find-generic-password -a "iru-temp-admin" -s "iru-temp-admin-api" -w /Library/Keychains/System.keychain 2>/dev/null)
 if [ -z "$API_KEY" ]; then
   echo "elevation-start: ERROR — API key not found in system keychain" >&2
   exit 1
@@ -150,7 +150,7 @@ if [ -z "$SERIAL" ] || ! echo "$SERIAL" | grep -qE '^[A-Z0-9]{8,14}$'; then
   exit 1
 fi
 
-ELEVATION_RESPONSE_FILE=$(mktemp /tmp/kandji-elevation-XXXXXX)
+ELEVATION_RESPONSE_FILE=$(mktemp /tmp/iru-elevation-XXXXXX)
 chmod 600 "$ELEVATION_RESPONSE_FILE"
 
 # N8-05: build POST body via python3 json.dumps — structurally safe regardless of
@@ -193,12 +193,12 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Schedule kandji run at expiration time — forces immediate agent processing
+# Schedule iru run at expiration time — forces immediate agent processing
 # when the log collection tag is assigned at T+30 min
 # ---------------------------------------------------------------------------
 if [ -n "$ELEVATION_END" ]; then
   EXPIRATION_RUNNER_PLIST="/Library/LaunchDaemons/com.kitchman.admin-expiration-runner.plist"
-  EXPIRATION_RUNNER_SCRIPT="/usr/local/bin/kandji-expiration-runner.sh"
+  EXPIRATION_RUNNER_SCRIPT="/usr/local/bin/iru-expiration-runner.sh"
 
   # N8-18: convert elevationEnd (UTC) to the device's LOCAL time before embedding in
   # StartCalendarInterval — launchd fires at local wall-clock time, not UTC.
@@ -221,57 +221,57 @@ except:
     echo "elevation-start: EXPIRE_HOUR/EXPIRE_MINUTE failed validation: hour=$EXPIRE_HOUR minute=$EXPIRE_MINUTE — skipping expiration plist" >&2
   else
 
-  # Write a dedicated expiration runner script so the kandji run lock can be respected.
+  # Write a dedicated expiration runner script so the iru run lock can be respected.
   # The inline plist command approach cannot wait on the lock.
   cat > "$EXPIRATION_RUNNER_SCRIPT" << EXPRUNNER_EOF
 #!/bin/bash
 PLIST="/Library/LaunchDaemons/com.kitchman.admin-expiration-runner.plist"
-SCRIPT="/usr/local/bin/kandji-expiration-runner.sh"
-KANDJI_RUN_LOCK="/var/run/kandji-run.lock"
+SCRIPT="/usr/local/bin/iru-expiration-runner.sh"
+IRU_RUN_LOCK="/var/run/iru-run.lock"
 
 ts() { date '+%Y-%m-%d %H:%M:%S'; }
 
-acquire_kandji_run_lock() {
+acquire_iru_run_lock() {
   local waited=0
-  if [ -f "\$KANDJI_RUN_LOCK" ]; then
+  if [ -f "\$IRU_RUN_LOCK" ]; then
     local lock_pid
-    lock_pid=\$(cat "\$KANDJI_RUN_LOCK" 2>/dev/null)
+    lock_pid=\$(cat "\$IRU_RUN_LOCK" 2>/dev/null)
     if [ -n "\$lock_pid" ] && ! kill -0 "\$lock_pid" 2>/dev/null; then
       echo "\$(ts) expiration-runner: stale lock (PID \$lock_pid is dead) — removing"
-      rm -f "\$KANDJI_RUN_LOCK"
+      rm -f "\$IRU_RUN_LOCK"
     fi
   fi
-  while [ -f "\$KANDJI_RUN_LOCK" ]; do
+  while [ -f "\$IRU_RUN_LOCK" ]; do
     if [ \$waited -ge 120 ]; then
-      echo "\$(ts) expiration-runner: kandji run lock timed out after \${waited}s — proceeding"
+      echo "\$(ts) expiration-runner: iru run lock timed out after \${waited}s — proceeding"
       break
     fi
     local lock_pid
-    lock_pid=\$(cat "\$KANDJI_RUN_LOCK" 2>/dev/null)
+    lock_pid=\$(cat "\$IRU_RUN_LOCK" 2>/dev/null)
     if [ -n "\$lock_pid" ] && ! kill -0 "\$lock_pid" 2>/dev/null; then
       echo "\$(ts) expiration-runner: stale lock (PID \$lock_pid is dead) — removing"
-      rm -f "\$KANDJI_RUN_LOCK"
+      rm -f "\$IRU_RUN_LOCK"
       break
     fi
-    echo "\$(ts) expiration-runner: kandji run in progress (locked by PID \$lock_pid) — waiting..."
+    echo "\$(ts) expiration-runner: iru run in progress (locked by PID \$lock_pid) — waiting..."
     sleep 5
     waited=\$((waited + 5))
   done
-  echo \$\$ > "\$KANDJI_RUN_LOCK"
+  echo \$\$ > "\$IRU_RUN_LOCK"
 }
 
-release_kandji_run_lock() {
-  rm -f "\$KANDJI_RUN_LOCK"
+release_iru_run_lock() {
+  rm -f "\$IRU_RUN_LOCK"
 }
 
 echo "\$(ts) expiration-runner: waiting 5s for log-collection tag propagation..."
 sleep 5
-acquire_kandji_run_lock
+acquire_iru_run_lock
 trap '' TERM
-echo "\$(ts) expiration-runner: running kandji run..."
-/usr/local/bin/kandji run --reset-daily >> /var/log/kandji-elevation.log 2>&1
-echo "\$(ts) expiration-runner: kandji run exited with code \$?"
-release_kandji_run_lock
+echo "\$(ts) expiration-runner: running iru run..."
+/usr/local/bin/iru run --reset-daily >> /var/log/iru-elevation.log 2>&1
+echo "\$(ts) expiration-runner: iru run exited with code \$?"
+release_iru_run_lock
 launchctl unload "\$PLIST" 2>/dev/null
 rm -f "\$PLIST" "\$SCRIPT"
 EXPRUNNER_EOF
@@ -298,9 +298,9 @@ EXPRUNNER_EOF
     <integer>$EXPIRE_MINUTE</integer>
   </dict>
   <key>StandardOutPath</key>
-  <string>/var/log/kandji-elevation.log</string>
+  <string>/var/log/iru-elevation.log</string>
   <key>StandardErrorPath</key>
-  <string>/var/log/kandji-elevation.log</string>
+  <string>/var/log/iru-elevation.log</string>
 </dict>
 </plist>
 RUNNER_EOF
@@ -316,7 +316,7 @@ fi
 # Install network monitor LaunchDaemon — revokes access if network drops
 # or if IT has revoked access early via the backend
 # ---------------------------------------------------------------------------
-MONITOR_SCRIPT="/usr/local/bin/kandji-admin-network-monitor.sh"
+MONITOR_SCRIPT="/usr/local/bin/iru-admin-network-monitor.sh"
 PLIST_PATH="/Library/LaunchDaemons/com.kitchman.admin-network-monitor.plist"
 API_STATUS_ENDPOINT="https://1mng27frfb.execute-api.us-east-1.amazonaws.com/Prod/status"
 
@@ -325,7 +325,7 @@ cat > "$MONITOR_SCRIPT" << MONITOR_EOF
 #!/bin/bash
 PRIVILEGES_CLI="/Applications/Privileges.app/Contents/MacOS/PrivilegesCLI"
 PLIST_PATH="/Library/LaunchDaemons/com.kitchman.admin-network-monitor.plist"
-REVOKE_PENDING_FLAG="/var/tmp/kandji-revoke-network-pending"
+REVOKE_PENDING_FLAG="/var/tmp/iru-revoke-network-pending"
 LOG_TAG="admin-network-monitor"
 REQUEST_ID="$REQUEST_ID"
 SERIAL="$SERIAL"
@@ -333,7 +333,7 @@ STATUS_ENDPOINT="$API_STATUS_ENDPOINT"
 REVOKE_ENDPOINT="https://1mng27frfb.execute-api.us-east-1.amazonaws.com/Prod/revoke-network-loss"
 # N6-09: fetch API key on each run rather than at daemon startup so key rotation takes effect
 # without restarting the daemon on every device
-API_KEY=\$(security find-generic-password -a "kandji-temp-admin" -s "kandji-temp-admin-api" -w /Library/Keychains/System.keychain 2>/dev/null)
+API_KEY=\$(security find-generic-password -a "iru-temp-admin" -s "iru-temp-admin-api" -w /Library/Keychains/System.keychain 2>/dev/null)
 if [ -z "\$API_KEY" ]; then
   echo "\$(ts) \$LOG_TAG: API key not found in keychain — skipping this cycle"
   exit 0
@@ -355,7 +355,7 @@ revoke_admin() {
         && echo "\$(ts) \$LOG_TAG: admin revoked via PrivilegesCLI (\$reason)" \
         || echo "\$(ts) \$LOG_TAG: PrivilegesCLI --remove returned non-zero"
     fi
-    /usr/local/bin/kandji display-alert \
+    /usr/local/bin/iru display-alert \
       --title "Admin Access Revoked" \
       --message "\$reason" \
       --no-wait
@@ -367,42 +367,42 @@ cleanup_daemon() {
   rm -f "\$PLIST_PATH" "\$REVOKE_PENDING_FLAG"
 }
 
-KANDJI_RUN_LOCK="/var/run/kandji-run.lock"
+IRU_RUN_LOCK="/var/run/iru-run.lock"
 
-# Acquire the kandji run lock — waits up to 120s if another kandji run is in progress.
+# Acquire the iru run lock — waits up to 120s if another iru run is in progress.
 # N8-08: PID written to lock file; dead-holder detected immediately without waiting 120s.
 # Uses /var/run/ so stale locks are cleared automatically on reboot.
-acquire_kandji_run_lock() {
+acquire_iru_run_lock() {
   local waited=0
-  if [ -f "\$KANDJI_RUN_LOCK" ]; then
+  if [ -f "\$IRU_RUN_LOCK" ]; then
     local lock_pid
-    lock_pid=\$(cat "\$KANDJI_RUN_LOCK" 2>/dev/null)
+    lock_pid=\$(cat "\$IRU_RUN_LOCK" 2>/dev/null)
     if [ -n "\$lock_pid" ] && ! kill -0 "\$lock_pid" 2>/dev/null; then
       echo "\$(ts) \$LOG_TAG: stale lock (PID \$lock_pid is dead) — removing"
-      rm -f "\$KANDJI_RUN_LOCK"
+      rm -f "\$IRU_RUN_LOCK"
     fi
   fi
-  while [ -f "\$KANDJI_RUN_LOCK" ]; do
+  while [ -f "\$IRU_RUN_LOCK" ]; do
     if [ \$waited -ge 120 ]; then
-      echo "\$(ts) \$LOG_TAG: kandji run lock timed out after \${waited}s — proceeding"
+      echo "\$(ts) \$LOG_TAG: iru run lock timed out after \${waited}s — proceeding"
       break
     fi
     local lock_pid
-    lock_pid=\$(cat "\$KANDJI_RUN_LOCK" 2>/dev/null)
+    lock_pid=\$(cat "\$IRU_RUN_LOCK" 2>/dev/null)
     if [ -n "\$lock_pid" ] && ! kill -0 "\$lock_pid" 2>/dev/null; then
       echo "\$(ts) \$LOG_TAG: stale lock (PID \$lock_pid is dead) — removing"
-      rm -f "\$KANDJI_RUN_LOCK"
+      rm -f "\$IRU_RUN_LOCK"
       break
     fi
-    echo "\$(ts) \$LOG_TAG: kandji run in progress (locked by PID \$lock_pid) — waiting..."
+    echo "\$(ts) \$LOG_TAG: iru run in progress (locked by PID \$lock_pid) — waiting..."
     sleep 5
     waited=\$((waited + 5))
   done
-  echo \$\$ > "\$KANDJI_RUN_LOCK"
+  echo \$\$ > "\$IRU_RUN_LOCK"
 }
 
-release_kandji_run_lock() {
-  rm -f "\$KANDJI_RUN_LOCK"
+release_iru_run_lock() {
+  rm -f "\$IRU_RUN_LOCK"
 }
 
 CURRENT_USER=\$(stat -f "%Su" /dev/console)
@@ -454,7 +454,7 @@ fi
 # Check backend status — detect early revocation by IT
 # N5-04: capture HTTP status separately; only parse body on 200
 if [ -n "\$REQUEST_ID" ] && [ -n "\$STATUS_ENDPOINT" ]; then
-  STATUS_TMPFILE=\$(mktemp /tmp/kandji-status-XXXXXX)
+  STATUS_TMPFILE=\$(mktemp /tmp/iru-status-XXXXXX)
   chmod 600 "\$STATUS_TMPFILE"
   STATUS_HTTP=\$(curl -s -o "\$STATUS_TMPFILE" -w "%{http_code}" --max-time 10 \
     -H "x-api-key: \$API_KEY" \
@@ -468,26 +468,26 @@ if [ -n "\$REQUEST_ID" ] && [ -n "\$STATUS_ENDPOINT" ]; then
         echo "\$(ts) \$LOG_TAG: backend reports revoked — revoking admin immediately"
         revoke_admin "Your temporary admin access was revoked by IT."
         rm -f "\$STATUS_TMPFILE"
-        # Ignore SIGTERM during kandji run — cleanup_daemon calls launchctl unload
-        # which sends SIGTERM to this process and would kill kandji run mid-execution.
+        # Ignore SIGTERM during iru run — cleanup_daemon calls launchctl unload
+        # which sends SIGTERM to this process and would kill iru run mid-execution.
         trap '' TERM
         echo "\$(ts) \$LOG_TAG: waiting 5s for log-collection tag propagation..."
         sleep 5
-        acquire_kandji_run_lock
-        echo "\$(ts) \$LOG_TAG: running kandji run to pick up log-collection tag..."
-        /usr/local/bin/kandji run --reset-daily >> /var/log/kandji-elevation.log 2>&1
-        echo "\$(ts) \$LOG_TAG: kandji run exited with code \$?"
-        release_kandji_run_lock
+        acquire_iru_run_lock
+        echo "\$(ts) \$LOG_TAG: running iru run to pick up log-collection tag..."
+        /usr/local/bin/iru run --reset-daily >> /var/log/iru-elevation.log 2>&1
+        echo "\$(ts) \$LOG_TAG: iru run exited with code \$?"
+        release_iru_run_lock
         # Verify revocation took effect — retry once after 30s if user is still admin
         IS_ADMIN=\$(dseditgroup -o checkmember -m "\$CURRENT_USER" admin 2>/dev/null | grep -c "yes")
         if [ "\$IS_ADMIN" -gt 0 ]; then
-          echo "\$(ts) \$LOG_TAG: admin not yet removed after first kandji run — waiting 30s before retry..."
+          echo "\$(ts) \$LOG_TAG: admin not yet removed after first iru run — waiting 30s before retry..."
           sleep 30
-          acquire_kandji_run_lock
-          echo "\$(ts) \$LOG_TAG: retry kandji run (revocation not yet confirmed)..."
-          /usr/local/bin/kandji run --reset-daily >> /var/log/kandji-elevation.log 2>&1
-          echo "\$(ts) \$LOG_TAG: retry kandji run exited with code \$?"
-          release_kandji_run_lock
+          acquire_iru_run_lock
+          echo "\$(ts) \$LOG_TAG: retry iru run (revocation not yet confirmed)..."
+          /usr/local/bin/iru run --reset-daily >> /var/log/iru-elevation.log 2>&1
+          echo "\$(ts) \$LOG_TAG: retry iru run exited with code \$?"
+          release_iru_run_lock
           IS_ADMIN=\$(dseditgroup -o checkmember -m "\$CURRENT_USER" admin 2>/dev/null | grep -c "yes")
           if [ "\$IS_ADMIN" -gt 0 ]; then
             echo "\$(ts) \$LOG_TAG: WARNING — user still admin after retry; collect-sudo-log.sh may need investigation"
@@ -547,9 +547,9 @@ cat > "$PLIST_PATH" << PLIST_EOF
   <key>RunAtLoad</key>
   <true/>
   <key>StandardOutPath</key>
-  <string>/var/log/kandji-elevation.log</string>
+  <string>/var/log/iru-elevation.log</string>
   <key>StandardErrorPath</key>
-  <string>/var/log/kandji-elevation.log</string>
+  <string>/var/log/iru-elevation.log</string>
 </dict>
 </plist>
 PLIST_EOF

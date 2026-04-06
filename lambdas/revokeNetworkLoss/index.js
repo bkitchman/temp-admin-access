@@ -1,4 +1,4 @@
-const kandji = require('../shared/kandji');
+const iru = require('../shared/iru');
 const slack = require('../shared/slack');
 const dynamo = require('../shared/dynamo');
 const { isValidUUID } = require('../shared/validate');
@@ -46,9 +46,9 @@ exports.handler = async (event) => {
     }
 
     // Remove elevation tag and assign log collection tag.
-    // The network monitor on the device calls `kandji run` to pick up the tag immediately.
-    await kandji.removeElevationTag(request.kandjiDeviceId);
-    await kandji.assignLogCollectionTag(request.kandjiDeviceId);
+    // The network monitor on the device calls `iru run` to pick up the tag immediately.
+    await iru.removeElevationTag(request.iruDeviceId);
+    await iru.assignLogCollectionTag(request.iruDeviceId);
 
     // N4-05: conditional write — only expire if still approved (prevents double-revoke race)
     try {

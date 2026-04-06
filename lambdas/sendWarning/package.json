@@ -2,7 +2,7 @@
   "name": "send-warning",
   "version": "1.0.0",
   "private": true,
-  "description": "Triggered by EventBridge at T+25 min — sends 5-minute warning notification to device via Kandji.",
+  "description": "Triggered by EventBridge at T+25 min — sends 5-minute warning notification to device via Iru.",
   "main": "index.js",
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.600.0",

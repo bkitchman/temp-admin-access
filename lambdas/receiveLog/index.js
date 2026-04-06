@@ -1,7 +1,7 @@
 const slack = require('../shared/slack');
 const { escapeSlack } = slack;
 const dynamo = require('../shared/dynamo');
-const kandji = require('../shared/kandji');
+const iru = require('../shared/iru');
 const { isValidUUID } = require('../shared/validate');
 
 exports.handler = async (event) => {
@@ -69,8 +69,8 @@ exports.handler = async (event) => {
     );
 
     // 5. Remove the log collection tag — cleanup, prevents script re-running
-    await kandji.removeLogCollectionTag(request.kandjiDeviceId);
-    console.log(`receiveLog: removed log collection tag from device ${request.kandjiDeviceId}`);
+    await iru.removeLogCollectionTag(request.iruDeviceId);
+    console.log(`receiveLog: removed log collection tag from device ${request.iruDeviceId}`);
 
     // 6. Update the original approval message to its final completed state — removes all buttons
     const outcome = request.lockedByIT ? 'locked'

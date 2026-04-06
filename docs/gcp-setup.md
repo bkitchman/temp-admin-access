@@ -1,6 +1,6 @@
 # GCP Setup Guide
 
-This guide covers adapting the backend to run on Google Cloud Platform. The Kandji scripts and Slack app configuration are **identical** to the AWS setup — only the backend infrastructure changes.
+This guide covers adapting the backend to run on Google Cloud Platform. The Iru scripts and Slack app configuration are **identical** to the AWS setup — only the backend infrastructure changes.
 
 ---
 
@@ -61,8 +61,8 @@ echo -n "xoxb-..." | gcloud secrets versions add slack-bot-token --data-file=-
 gcloud secrets create slack-signing-secret --replication-policy=automatic
 echo -n "your-signing-secret" | gcloud secrets versions add slack-signing-secret --data-file=-
 
-gcloud secrets create kandji-api-token --replication-policy=automatic
-echo -n "your-kandji-token" | gcloud secrets versions add kandji-api-token --data-file=-
+gcloud secrets create iru-api-token --replication-policy=automatic
+echo -n "your-iru-token" | gcloud secrets versions add iru-api-token --data-file=-
 
 gcloud secrets create self-service-api-key --replication-policy=automatic
 echo -n "your-api-key" | gcloud secrets versions add self-service-api-key --data-file=-
@@ -176,11 +176,11 @@ gcloud functions deploy handleRequest \
   --entry-point=handler \
   --trigger-http \
   --allow-unauthenticated \
-  --set-secrets="SLACK_BOT_TOKEN=slack-bot-token:latest,SLACK_SIGNING_SECRET=slack-signing-secret:latest,KANDJI_API_TOKEN=kandji-api-token:latest,SELF_SERVICE_API_KEY=self-service-api-key:latest" \
-  --set-env-vars="SLACK_IT_CHANNEL_ID=C012AB3CD,KANDJI_BASE_URL=https://yourorg.api.kandji.io,EMAIL_DOMAIN=company.com"
+  --set-secrets="SLACK_BOT_TOKEN=slack-bot-token:latest,SLACK_SIGNING_SECRET=slack-signing-secret:latest,IRU_API_TOKEN=iru-api-token:latest,SELF_SERVICE_API_KEY=self-service-api-key:latest" \
+  --set-env-vars="SLACK_IT_CHANNEL_ID=C012AB3CD,IRU_BASE_URL=https://yourorg.api.iru.io,EMAIL_DOMAIN=company.com"
 ```
 
-Each function gets its own HTTPS trigger URL. Collect them after deploy — they replace the API Gateway URLs in your Slack app configuration and Kandji scripts.
+Each function gets its own HTTPS trigger URL. Collect them after deploy — they replace the API Gateway URLs in your Slack app configuration and Iru scripts.
 
 ---
 
@@ -210,7 +210,7 @@ After deploy, update the Slack app's **Interactivity Request URL** and **Slash C
 
 ---
 
-## 7. Configure Kandji Scripts
+## 7. Configure Iru Scripts
 
 In the three device shell scripts, update the hardcoded API endpoint URLs to your Cloud Function or API Gateway URLs. Everything else (keychain, PrivilegesCLI, log collection) is identical.
 
@@ -224,11 +224,11 @@ All Lambda environment variables have direct GCP equivalents. Set them via `--se
 |---|---|
 | `SLACK_BOT_TOKEN` | Secret Manager |
 | `SLACK_SIGNING_SECRET` | Secret Manager |
-| `KANDJI_API_TOKEN` | Secret Manager |
+| `IRU_API_TOKEN` | Secret Manager |
 | `SELF_SERVICE_API_KEY` | Secret Manager |
 | `SLACK_IT_CHANNEL_ID` | Environment variable |
-| `KANDJI_BASE_URL` | Environment variable |
-| `KANDJI_ELEVATION_TAG` | Environment variable |
-| `KANDJI_LOG_COLLECTION_TAG` | Environment variable |
+| `IRU_BASE_URL` | Environment variable |
+| `IRU_ELEVATION_TAG` | Environment variable |
+| `IRU_LOG_COLLECTION_TAG` | Environment variable |
 | `EMAIL_DOMAIN` | Environment variable |
 | `FIRESTORE_COLLECTION` | Environment variable (replaces `DYNAMODB_TABLE_NAME`) |

@@ -1,21 +1,21 @@
-// Kandji API helpers
-const KANDJI_BASE_URL = process.env.KANDJI_BASE_URL;
-const KANDJI_API_TOKEN = process.env.KANDJI_API_TOKEN;
-const ELEVATION_TAG = process.env.KANDJI_ELEVATION_TAG;
-const LOG_COLLECTION_TAG = process.env.KANDJI_LOG_COLLECTION_TAG;
+// Iru API helpers
+const IRU_BASE_URL = process.env.IRU_BASE_URL;
+const IRU_API_TOKEN = process.env.IRU_API_TOKEN;
+const ELEVATION_TAG = process.env.IRU_ELEVATION_TAG;
+const LOG_COLLECTION_TAG = process.env.IRU_LOG_COLLECTION_TAG;
 
 function getHeaders() {
   return {
-    Authorization: `Bearer ${KANDJI_API_TOKEN}`,
+    Authorization: `Bearer ${IRU_API_TOKEN}`,
     'Content-Type': 'application/json;charset=utf-8',
     Accept: 'application/json',
     'Cache-Control': 'no-cache'
   };
 }
 
-async function kandjiRequest(method, path, body, attempt = 1) {
-  const url = `${KANDJI_BASE_URL}${path}`;
-  console.log(`Kandji request: ${method} ${url}${attempt > 1 ? ` (attempt ${attempt})` : ''}`);
+async function iruRequest(method, path, body, attempt = 1) {
+  const url = `${IRU_BASE_URL}${path}`;
+  console.log(`Iru request: ${method} ${url}${attempt > 1 ? ` (attempt ${attempt})` : ''}`);
   const options = { method, headers: getHeaders() };
   if (body !== undefined) {
     options.body = JSON.stringify(body);
@@ -34,15 +34,15 @@ async function kandjiRequest(method, path, body, attempt = 1) {
         errDetail = ` — ${errText.slice(0, 200)}`;
       } catch { /* ignore read errors */ }
     }
-    console.error(`Kandji ${method} ${path} failed: HTTP ${response.status}${errDetail}`);
+    console.error(`Iru ${method} ${path} failed: HTTP ${response.status}${errDetail}`);
     // N7-10: retry on transient 5xx/429 — do not retry 4xx (auth/not-found errors)
     if (attempt < 3 && (response.status >= 500 || response.status === 429)) {
       const backoffMs = attempt * 1000;
-      console.warn(`Kandji retrying in ${backoffMs}ms...`);
+      console.warn(`Iru retrying in ${backoffMs}ms...`);
       await new Promise(r => setTimeout(r, backoffMs));
-      return kandjiRequest(method, path, body, attempt + 1);
+      return iruRequest(method, path, body, attempt + 1);
     }
-    throw new Error(`Kandji API error: HTTP ${response.status}`);
+    throw new Error(`Iru API error: HTTP ${response.status}`);
   }
 
   if (response.status === 204) return null;
@@ -51,18 +51,18 @@ async function kandjiRequest(method, path, body, attempt = 1) {
   return JSON.parse(text);
 }
 
-// Resolve serial number to Kandji device object — returns { device_id, tags, ... }
+// Resolve serial number to Iru device object — returns { device_id, tags, ... }
 async function getDeviceBySerial(serial) {
-  const devices = await kandjiRequest('GET', `/v1/devices?serial_number=${encodeURIComponent(serial)}`);
+  const devices = await iruRequest('GET', `/v1/devices?serial_number=${encodeURIComponent(serial)}`);
   if (!devices || devices.length === 0) {
-    throw new Error(`No Kandji device found for serial: ${serial}`);
+    throw new Error(`No Iru device found for serial: ${serial}`);
   }
   return devices[0];
 }
 
 // Get full device details including current tags
 async function getDevice(deviceId) {
-  return kandjiRequest('GET', `/v1/devices/${deviceId}`);
+  return iruRequest('GET', `/v1/devices/${deviceId}`);
 }
 
 // Get the current tags for a device
@@ -72,9 +72,9 @@ async function getDeviceTags(deviceId) {
   return Array.isArray(device.tags) ? device.tags : [];
 }
 
-// Update a device's full tag array — Kandji requires the complete list every time
+// Update a device's full tag array — Iru requires the complete list every time
 async function setDeviceTags(deviceId, tags) {
-  return kandjiRequest('PATCH', `/v1/devices/${deviceId}`, { tags });
+  return iruRequest('PATCH', `/v1/devices/${deviceId}`, { tags });
 }
 
 // Add a tag to a device, preserving all existing tags
@@ -123,7 +123,7 @@ async function removeLogCollectionTag(deviceId) {
 
 // Lock the device immediately via MDM.
 async function lockDevice(deviceId) {
-  await kandjiRequest('POST', `/v1/devices/${deviceId}/action/lock`, {});
+  await iruRequest('POST', `/v1/devices/${deviceId}/action/lock`, {});
 }
 
 module.exports = {

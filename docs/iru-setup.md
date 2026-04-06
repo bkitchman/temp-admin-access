@@ -1,22 +1,22 @@
-# Kandji Setup Guide
+# Iru Setup Guide
 
 ## 1. Create the Two Tags
 
-In the Kandji web console, go to **Devices → Tags** and create both tags:
+In the Iru web console, go to **Devices → Tags** and create both tags:
 
 | Tag | Purpose |
 |---|---|
 | `temp-admin-elevation` | Assigned on approval — scopes SAP Privileges and `elevation-start.sh` |
 | `temp-admin-log-collection` | Assigned on expiration/revocation — triggers `collect-sudo-log.sh` |
 
-The tag names must match the `KandjiElevationTag` and `KandjiLogCollectionTag` SAM parameters exactly.
+The tag names must match the `IruElevationTag` and `IruLogCollectionTag` SAM parameters exactly.
 
 ---
 
 ## 2. Add SAP Privileges to the Library
 
 1. Go to **Library → Add Library Item → App**.
-2. Add **Privileges** by SAP SE (available via the Kandji App Catalog, or upload the `.pkg` from the [SAP GitHub release](https://github.com/SAP/macOS-enterprise-privileges/releases)).
+2. Add **Privileges** by SAP SE (available via the Iru App Catalog, or upload the `.pkg` from the [SAP GitHub release](https://github.com/SAP/macOS-enterprise-privileges/releases)).
 3. Under **Assignment Rules**, scope to devices with the tag `temp-admin-elevation`.
 4. Set install behavior to **Continuously Enforce** so it is removed when the tag is revoked.
 
@@ -38,17 +38,17 @@ The profile configures:
 
 ## 4. Upload the Shell Scripts
 
-There are three scripts to add as Kandji Library Items. Use [kst](https://github.com/kandji-inc/kst) to manage them (recommended), or upload manually.
+There are three scripts to add as Iru Library Items. Use [kst](https://github.com/iru-inc/kst) to manage them (recommended), or upload manually.
 
 ### Option A: kst (recommended)
 
 ```bash
 # Install kst
-brew tap kandji-inc/kst https://github.com/kandji-inc/kst.git && brew install kst
+brew tap iru-inc/kst https://github.com/iru-inc/kst.git && brew install kst
 
 # Set credentials
-export KST_TENANT="yourorg.kandji.io"
-export KST_TOKEN="your-kandji-api-token"
+export KST_TENANT="yourorg.iru.io"
+export KST_TOKEN="your-iru-api-token"
 
 # Initialize a local repo and pull all existing scripts
 kst new kst-repo
@@ -112,11 +112,11 @@ API_ENDPOINT="https://YOUR_API_GATEWAY_URL/Prod/log"
 
 ## 5. Provision the API Key on Devices
 
-Run `scripts/provision-api-key.sh` on each managed device to store the shared API key in the macOS system keychain. The easiest way is to add it as a Kandji Library Item scoped to all managed devices and run it once.
+Run `scripts/provision-api-key.sh` on each managed device to store the shared API key in the macOS system keychain. The easiest way is to add it as a Iru Library Item scoped to all managed devices and run it once.
 
 The script stores the key under:
-- Account: `kandji-temp-admin`
-- Service: `kandji-temp-admin-api`
+- Account: `iru-temp-admin`
+- Service: `iru-temp-admin-api`
 - Keychain: `/Library/Keychains/System.keychain` (accessible by root without user interaction)
 
 ```bash
@@ -126,21 +126,21 @@ sudo ./scripts/provision-api-key.sh "your-self-service-api-key"
 
 ---
 
-## 6. Kandji API Token
+## 6. Iru API Token
 
 1. Go to **Settings → Access → API Token**.
 2. Create a token with:
    - `Devices: Read` — resolve serial number to device ID
    - `Devices: Write` — assign and remove tags
-3. Copy the token — this is your `KANDJI_API_TOKEN` SAM parameter.
+3. Copy the token — this is your `IRU_API_TOKEN` SAM parameter.
 
-Your tenant API base URL is `https://<subdomain>.api.kandji.io`. Find it at **Settings → Access → API URL**. This is your `KANDJI_BASE_URL` SAM parameter.
+Your tenant API base URL is `https://<subdomain>.api.iru.io`. Find it at **Settings → Access → API URL**. This is your `IRU_BASE_URL` SAM parameter.
 
 ---
 
 ## 7. Verify the Flow
 
-1. Assign the `temp-admin-elevation` tag to a test device manually in Kandji.
+1. Assign the `temp-admin-elevation` tag to a test device manually in Iru.
 2. Confirm `elevation-start.sh` runs and the user gains admin.
 3. Remove the tag — confirm admin is revoked.
 4. Assign `temp-admin-log-collection` — confirm `collect-sudo-log.sh` runs and a log appears in Slack.

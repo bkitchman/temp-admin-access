@@ -1,6 +1,6 @@
 #!/bin/bash
-# Kandji Self Service — Request Temporary Admin Access
-# Deploy as a Self Service script in the Kandji Library.
+# Iru Self Service — Request Temporary Admin Access
+# Deploy as a Self Service script in the Iru Library.
 umask 077  # ensure mktemp files are always 0600 regardless of calling environment
 
 # macOS does not ship the GNU `timeout` command. Provide a no-op fallback so scripts
@@ -10,14 +10,14 @@ if ! command -v timeout &>/dev/null; then
 fi
 
 API_ENDPOINT="https://1mng27frfb.execute-api.us-east-1.amazonaws.com/Prod/request"
-RESPONSE_FILE=$(mktemp /tmp/kandji-request-XXXXXX)
+RESPONSE_FILE=$(mktemp /tmp/iru-request-XXXXXX)
 chmod 600 "$RESPONSE_FILE"
-API_KEY=$(security find-generic-password -a "kandji-temp-admin" -s "kandji-temp-admin-api" -w /Library/Keychains/System.keychain 2>/dev/null)
+API_KEY=$(security find-generic-password -a "iru-temp-admin" -s "iru-temp-admin-api" -w /Library/Keychains/System.keychain 2>/dev/null)
 if [ -z "$API_KEY" ]; then
   echo "ERROR: API key not found in system keychain — run the provisioning script first" >&2
   exit 1
 fi
-META_DIR="/var/root/.kandji-elevation"
+META_DIR="/var/root/.iru-elevation"
 META_FILE="$META_DIR/meta.json"
 install -d -m 700 "$META_DIR"
 chmod 700 "$META_DIR"  # Re-enforce in case directory already existed with looser permissions
@@ -38,7 +38,7 @@ echo "Username: $USERNAME"
 
 if [ -z "$SERIAL" ] || [ -z "$USERNAME" ]; then
   echo "ERROR: Could not determine serial or username"
-  /usr/local/bin/kandji display-alert --title "Error" --message "Could not determine device information. Please contact IT."
+  /usr/local/bin/iru display-alert --title "Error" --message "Could not determine device information. Please contact IT."
   exit 1
 fi
 
@@ -72,10 +72,10 @@ if diff > 0:
 else:
     print('expiring soon')
 " "$ELEVATION_END" 2>/dev/null)
-    /usr/local/bin/kandji display-alert --title "Admin Access Active" \
+    /usr/local/bin/iru display-alert --title "Admin Access Active" \
       --message "You already have temporary admin access. Time remaining: $REMAINING."
   else
-    /usr/local/bin/kandji display-alert --title "Admin Access Active" \
+    /usr/local/bin/iru display-alert --title "Admin Access Active" \
       --message "You already have temporary admin access."
   fi
 
@@ -99,7 +99,7 @@ echo "Reason provided: $REASON"
 
 if [ $OSASCRIPT_EXIT -ne 0 ] || [ -z "$REASON" ]; then
   echo "User cancelled or provided no reason — exiting cleanly"
-  /usr/local/bin/kandji display-alert --title "Admin Access Request" --message "Request cancelled." --no-wait
+  /usr/local/bin/iru display-alert --title "Admin Access Request" --message "Request cancelled." --no-wait
   exit 0
 fi
 
@@ -156,7 +156,7 @@ echo "curl exit code: $CURL_EXIT"
 
 if [ $CURL_EXIT -ne 0 ]; then
   echo "ERROR: curl failed with exit code $CURL_EXIT"
-  /usr/local/bin/kandji display-alert --title "Request Failed" \
+  /usr/local/bin/iru display-alert --title "Request Failed" \
     --message "Network error. Please check your connection and try again."
   exit 1
 fi
@@ -166,7 +166,7 @@ echo "Response body: $BODY"
 
 if [ "$HTTP_STATUS" != "200" ]; then
   echo "ERROR: API returned HTTP $HTTP_STATUS"
-  /usr/local/bin/kandji display-alert --title "Request Failed" \
+  /usr/local/bin/iru display-alert --title "Request Failed" \
     --message "Server returned an error (HTTP $HTTP_STATUS). Please contact IT."
   exit 1
 fi
@@ -185,7 +185,7 @@ fi
 echo "Request ID: $REQUEST_ID"
 
 # N5-07: atomic write — write to temp file first, then mv to final path
-META_TMPFILE=$(mktemp /tmp/kandji-meta-XXXXXX)
+META_TMPFILE=$(mktemp /tmp/iru-meta-XXXXXX)
 chmod 600 "$META_TMPFILE"
 
 timeout 5 python3 -c "
@@ -208,17 +208,17 @@ echo "Metadata written to $META_FILE"
 # ---------------------------------------------------------------------------
 # Notify user of success, then install an approval-monitor LaunchDaemon.
 # The daemon polls /status every 20 seconds in the background so this script
-# can exit immediately — avoids blocking the Kandji agent while waiting.
+# can exit immediately — avoids blocking the Iru agent while waiting.
 # ---------------------------------------------------------------------------
 echo "Request submitted successfully"
-/usr/local/bin/kandji display-alert --title "Admin Access Request" \
+/usr/local/bin/iru display-alert --title "Admin Access Request" \
   --message "Your request has been submitted and is pending IT approval. You will be notified once a decision is made." \
   --no-wait
 
 STATUS_ENDPOINT="https://1mng27frfb.execute-api.us-east-1.amazonaws.com/Prod/status"
-APPROVAL_MONITOR_SCRIPT="/usr/local/bin/kandji-approval-monitor.sh"
+APPROVAL_MONITOR_SCRIPT="/usr/local/bin/iru-approval-monitor.sh"
 APPROVAL_MONITOR_PLIST="/Library/LaunchDaemons/com.kitchman.admin-approval-monitor.plist"
-APPROVAL_ATTEMPT_FILE="/var/tmp/kandji-approval-attempt"
+APPROVAL_ATTEMPT_FILE="/var/tmp/iru-approval-attempt"
 
 # Clean up any previous approval monitor before installing a fresh one.
 # N8-04: remove files before unloading from launchd — launchctl remove uses the label
@@ -239,11 +239,11 @@ SERIAL="$SERIAL_SAFE"
 USERNAME="$USERNAME_SAFE"
 STATUS_ENDPOINT="$STATUS_ENDPOINT"
 APPROVAL_MONITOR_PLIST="/Library/LaunchDaemons/com.kitchman.admin-approval-monitor.plist"
-APPROVAL_MONITOR_SCRIPT="/usr/local/bin/kandji-approval-monitor.sh"
-ATTEMPT_FILE="/var/tmp/kandji-approval-attempt"
+APPROVAL_MONITOR_SCRIPT="/usr/local/bin/iru-approval-monitor.sh"
+ATTEMPT_FILE="/var/tmp/iru-approval-attempt"
 MAX_ATTEMPTS=15
 
-KANDJI_RUN_LOCK="/var/run/kandji-run.lock"
+IRU_RUN_LOCK="/var/run/iru-run.lock"
 
 ts() { date '+%Y-%m-%d %H:%M:%S'; }
 
@@ -252,42 +252,42 @@ cleanup() {
   rm -f "\$APPROVAL_MONITOR_PLIST" "\$APPROVAL_MONITOR_SCRIPT" "\$ATTEMPT_FILE"
 }
 
-# Acquire the kandji run lock — waits up to 120s if another kandji run is in progress.
+# Acquire the iru run lock — waits up to 120s if another iru run is in progress.
 # N8-08: PID is written to the lock file so a dead holder is detected immediately
 # rather than waiting out the full 120s timeout.
 # Uses /var/run/ so stale locks are automatically cleared on reboot.
-acquire_kandji_run_lock() {
+acquire_iru_run_lock() {
   local waited=0
   # Remove stale lock immediately if the holding PID is no longer alive
-  if [ -f "\$KANDJI_RUN_LOCK" ]; then
+  if [ -f "\$IRU_RUN_LOCK" ]; then
     local lock_pid
-    lock_pid=\$(cat "\$KANDJI_RUN_LOCK" 2>/dev/null)
+    lock_pid=\$(cat "\$IRU_RUN_LOCK" 2>/dev/null)
     if [ -n "\$lock_pid" ] && ! kill -0 "\$lock_pid" 2>/dev/null; then
       echo "\$(ts) approval-monitor: stale lock (PID \$lock_pid is dead) — removing"
-      rm -f "\$KANDJI_RUN_LOCK"
+      rm -f "\$IRU_RUN_LOCK"
     fi
   fi
-  while [ -f "\$KANDJI_RUN_LOCK" ]; do
+  while [ -f "\$IRU_RUN_LOCK" ]; do
     if [ \$waited -ge 120 ]; then
-      echo "\$(ts) approval-monitor: kandji run lock timed out after \${waited}s — proceeding"
+      echo "\$(ts) approval-monitor: iru run lock timed out after \${waited}s — proceeding"
       break
     fi
     local lock_pid
-    lock_pid=\$(cat "\$KANDJI_RUN_LOCK" 2>/dev/null)
+    lock_pid=\$(cat "\$IRU_RUN_LOCK" 2>/dev/null)
     if [ -n "\$lock_pid" ] && ! kill -0 "\$lock_pid" 2>/dev/null; then
       echo "\$(ts) approval-monitor: stale lock (PID \$lock_pid is dead) — removing"
-      rm -f "\$KANDJI_RUN_LOCK"
+      rm -f "\$IRU_RUN_LOCK"
       break
     fi
-    echo "\$(ts) approval-monitor: kandji run in progress (locked by PID \$lock_pid) — waiting..."
+    echo "\$(ts) approval-monitor: iru run in progress (locked by PID \$lock_pid) — waiting..."
     sleep 5
     waited=\$((waited + 5))
   done
-  echo \$\$ > "\$KANDJI_RUN_LOCK"
+  echo \$\$ > "\$IRU_RUN_LOCK"
 }
 
-release_kandji_run_lock() {
-  rm -f "\$KANDJI_RUN_LOCK"
+release_iru_run_lock() {
+  rm -f "\$IRU_RUN_LOCK"
 }
 
 # Increment and read attempt counter — persisted across daemon invocations
@@ -298,7 +298,7 @@ echo "\$(ts) approval-monitor: poll attempt \$ATTEMPT of \$MAX_ATTEMPTS"
 
 if [ "\$ATTEMPT" -gt "\$MAX_ATTEMPTS" ]; then
   echo "\$(ts) approval-monitor: timed out after \$MAX_ATTEMPTS attempts — request still pending"
-  /usr/local/bin/kandji display-alert --title "Admin Access Request" \
+  /usr/local/bin/iru display-alert --title "Admin Access Request" \
     --message "Your request is still pending IT approval. You will receive a Slack DM when a decision is made — no need to re-submit." \
     --no-wait
   cleanup
@@ -306,13 +306,13 @@ if [ "\$ATTEMPT" -gt "\$MAX_ATTEMPTS" ]; then
 fi
 
 # Fetch API key each cycle so key rotation takes effect without reinstalling the daemon
-API_KEY=\$(security find-generic-password -a "kandji-temp-admin" -s "kandji-temp-admin-api" -w /Library/Keychains/System.keychain 2>/dev/null)
+API_KEY=\$(security find-generic-password -a "iru-temp-admin" -s "iru-temp-admin-api" -w /Library/Keychains/System.keychain 2>/dev/null)
 if [ -z "\$API_KEY" ]; then
   echo "\$(ts) approval-monitor: API key not found in keychain — skipping cycle"
   exit 0
 fi
 
-STATUS_TMPFILE=\$(mktemp /tmp/kandji-approval-XXXXXX)
+STATUS_TMPFILE=\$(mktemp /tmp/iru-approval-XXXXXX)
 chmod 600 "\$STATUS_TMPFILE"
 HTTP_CODE=\$(curl -s -o "\$STATUS_TMPFILE" -w "%{http_code}" \
   -H "x-api-key: \$API_KEY" \
@@ -326,31 +326,31 @@ case "\$HTTP_CODE" in
 
     if [ "\$CURRENT_STATUS" = "approved" ]; then
       rm -f "\$STATUS_TMPFILE"
-      echo "\$(ts) approval-monitor: approved — showing alert and running kandji run"
-      /usr/local/bin/kandji display-alert --title "Admin Access Approved" \
+      echo "\$(ts) approval-monitor: approved — showing alert and running iru run"
+      /usr/local/bin/iru display-alert --title "Admin Access Approved" \
         --message "Your request was approved! Applying changes now — you will be elevated to admin shortly." \
         --no-wait
       # Ignore SIGTERM during the critical section — cleanup() calls launchctl unload
       # which sends SIGTERM to this process. Without the trap, the signal can arrive
-      # mid-kandji-run and kill it before it finishes processing the elevation tag.
+      # mid-iru-run and kill it before it finishes processing the elevation tag.
       trap '' TERM
-      echo "\$(ts) approval-monitor: waiting 5s for Kandji tag propagation..."
+      echo "\$(ts) approval-monitor: waiting 5s for Iru tag propagation..."
       sleep 5
-      acquire_kandji_run_lock
-      echo "\$(ts) approval-monitor: running kandji run..."
-      /usr/local/bin/kandji run --reset-daily >> /var/log/kandji-elevation.log 2>&1
-      echo "\$(ts) approval-monitor: kandji run exited with code \$?"
-      release_kandji_run_lock
+      acquire_iru_run_lock
+      echo "\$(ts) approval-monitor: running iru run..."
+      /usr/local/bin/iru run --reset-daily >> /var/log/iru-elevation.log 2>&1
+      echo "\$(ts) approval-monitor: iru run exited with code \$?"
+      release_iru_run_lock
       # Verify elevation took effect — retry once after 30s if not yet admin
       IS_ADMIN=\$(dseditgroup -o checkmember -m "\$USERNAME" admin 2>/dev/null | grep -c "yes")
       if [ "\$IS_ADMIN" -eq 0 ]; then
-        echo "\$(ts) approval-monitor: elevation not confirmed after first kandji run — waiting 30s before retry..."
+        echo "\$(ts) approval-monitor: elevation not confirmed after first iru run — waiting 30s before retry..."
         sleep 30
-        acquire_kandji_run_lock
-        echo "\$(ts) approval-monitor: retry kandji run (elevation not yet confirmed)..."
-        /usr/local/bin/kandji run --reset-daily >> /var/log/kandji-elevation.log 2>&1
-        echo "\$(ts) approval-monitor: retry kandji run exited with code \$?"
-        release_kandji_run_lock
+        acquire_iru_run_lock
+        echo "\$(ts) approval-monitor: retry iru run (elevation not yet confirmed)..."
+        /usr/local/bin/iru run --reset-daily >> /var/log/iru-elevation.log 2>&1
+        echo "\$(ts) approval-monitor: retry iru run exited with code \$?"
+        release_iru_run_lock
         IS_ADMIN=\$(dseditgroup -o checkmember -m "\$USERNAME" admin 2>/dev/null | grep -c "yes")
         if [ "\$IS_ADMIN" -eq 0 ]; then
           echo "\$(ts) approval-monitor: WARNING — user still not admin after retry; elevation-start.sh may need investigation"
@@ -368,7 +368,7 @@ case "\$HTTP_CODE" in
     elif [ "\$CURRENT_STATUS" = "denied" ]; then
       rm -f "\$STATUS_TMPFILE"
       echo "\$(ts) approval-monitor: denied — cleaning up"
-      /usr/local/bin/kandji display-alert --title "Admin Access Denied" \
+      /usr/local/bin/iru display-alert --title "Admin Access Denied" \
         --message "Your temporary admin access request was denied by IT. Please reach out to IT if you have questions."
       cleanup
       exit 0
@@ -407,9 +407,9 @@ cat > "$APPROVAL_MONITOR_PLIST" << PLIST_EOF
   <key>RunAtLoad</key>
   <true/>
   <key>StandardOutPath</key>
-  <string>/var/log/kandji-elevation.log</string>
+  <string>/var/log/iru-elevation.log</string>
   <key>StandardErrorPath</key>
-  <string>/var/log/kandji-elevation.log</string>
+  <string>/var/log/iru-elevation.log</string>
 </dict>
 </plist>
 PLIST_EOF

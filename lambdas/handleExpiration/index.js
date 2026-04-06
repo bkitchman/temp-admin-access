@@ -1,4 +1,4 @@
-const kandji = require('../shared/kandji');
+const iru = require('../shared/iru');
 const slack = require('../shared/slack');
 const dynamo = require('../shared/dynamo');
 const { isValidUUID } = require('../shared/validate');
@@ -24,14 +24,14 @@ exports.handler = async (event) => {
 
   // 1. Remove the elevation tag — critical path.
   //    If this fails, throw so EventBridge retries the whole expiration.
-  await kandji.removeElevationTag(request.kandjiDeviceId);
-  console.log(`handleExpiration: removed elevation tag from device ${request.kandjiDeviceId}`);
+  await iru.removeElevationTag(request.iruDeviceId);
+  console.log(`handleExpiration: removed elevation tag from device ${request.iruDeviceId}`);
 
   // 2. Assign log collection tag and trigger check-in.
   //    N5-03: wrap separately — if these fail, elevation is already revoked so we still
   //    mark the record expired and alert IT rather than leaving it stuck in 'approved'.
   try {
-    await kandji.assignLogCollectionTag(request.kandjiDeviceId);
+    await iru.assignLogCollectionTag(request.iruDeviceId);
     console.log(`handleExpiration: log collection tag assigned for request ${requestId}`);
   } catch (err) {
     console.error(`handleExpiration: log collection steps failed for ${requestId}:`, err.message);

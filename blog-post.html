@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Building a Temporary Admin Access Workflow — Bryan Kitchman</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #fafafa; color: #1a1a2e; line-height: 1.75; }
+  .hero { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); color: #fff; padding: 5rem 2rem 4rem; text-align: center; }
+  .hero h1 { font-size: clamp(1.8rem, 4vw, 2.8rem); font-weight: 800; max-width: 800px; margin: 0 auto 1rem; line-height: 1.2; }
+  .hero p { font-size: 1.1rem; color: #a8b2d8; max-width: 620px; margin: 0 auto 2rem; }
+  .tags { display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap; }
+  .tag { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 20px; padding: 0.25rem 0.75rem; font-size: 0.8rem; color: #a8b2d8; }
+  .content { max-width: 800px; margin: 0 auto; padding: 3rem 2rem; }
+  h2 { font-size: 1.5rem; font-weight: 700; color: #0f3460; margin: 3rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid #e8eef9; }
+  h3 { font-size: 1.15rem; font-weight: 700; color: #1a1a2e; margin: 2rem 0 0.75rem; }
+  p { margin-bottom: 1.25rem; color: #374151; }
+  ul, ol { margin: 0 0 1.25rem 1.5rem; color: #374151; }
+  li { margin-bottom: 0.4rem; }
+  a { color: #0f3460; }
+  code { background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 4px; padding: 0.15rem 0.4rem; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.85em; color: #e11d48; }
+  pre { background: #1a1a2e; color: #e2e8f0; border-radius: 10px; padding: 1.5rem; overflow-x: auto; margin: 1.5rem 0; font-size: 0.85rem; line-height: 1.6; }
+  pre code { background: none; border: none; padding: 0; color: inherit; font-size: inherit; }
+  .callout { border-left: 4px solid #0f3460; background: #f0f4ff; border-radius: 0 8px 8px 0; padding: 1rem 1.25rem; margin: 1.5rem 0; }
+  .callout.warn { border-color: #d97706; background: #fffbeb; }
+  .callout.success { border-color: #059669; background: #f0fdf4; }
+  .callout p { margin: 0; }
+  .flow { background: #f8faff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1.5rem 2rem; margin: 1.5rem 0; }
+  .flow-step { display: flex; gap: 1rem; align-items: flex-start; margin-bottom: 1rem; }
+  .flow-step:last-child { margin-bottom: 0; }
+  .step-num { background: #0f3460; color: #fff; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: 700; flex-shrink: 0; margin-top: 0.15rem; }
+  .step-text strong { display: block; font-weight: 600; color: #1a1a2e; margin-bottom: 0.1rem; }
+  .step-text span { font-size: 0.9rem; color: #6b7280; }
+  .arch-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin: 1.5rem 0; }
+  .arch-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 1.25rem; }
+  .arch-card h4 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; color: #6b7280; margin-bottom: 0.5rem; }
+  .arch-card p { font-size: 0.9rem; color: #374151; margin: 0; }
+  .security-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; margin: 1.5rem 0; }
+  .security-item { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 1rem; }
+  .security-item h4 { font-size: 0.9rem; font-weight: 700; color: #065f46; margin-bottom: 0.4rem; }
+  .security-item p { font-size: 0.85rem; color: #374151; margin: 0; }
+  .lesson { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 1.25rem 1.5rem; margin-bottom: 1rem; }
+  .lesson h4 { font-weight: 700; color: #1a1a2e; margin-bottom: 0.4rem; }
+  .lesson p { font-size: 0.92rem; margin: 0; color: #4b5563; }
+  .stat-row { display: flex; gap: 1rem; flex-wrap: wrap; margin: 1.5rem 0; }
+  .stat { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 1rem 1.5rem; flex: 1; min-width: 140px; text-align: center; }
+  .stat-num { font-size: 2rem; font-weight: 800; color: #0f3460; line-height: 1; }
+  .stat-label { font-size: 0.8rem; color: #6b7280; margin-top: 0.25rem; }
+  footer { background: #1a1a2e; color: #a8b2d8; text-align: center; padding: 2rem; font-size: 0.85rem; margin-top: 4rem; }
+  @media (max-width: 600px) { .content { padding: 2rem 1rem; } }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <h1>Building a Zero-Trust Temporary Admin Access Workflow on macOS</h1>
+  <p>How we replaced the "just make them a local admin" workaround with a Slack-approved, time-limited, fully audited elevation pipeline.</p>
+  <div class="tags">
+    <span class="tag">AWS Lambda</span>
+    <span class="tag">Iru MDM</span>
+    <span class="tag">SAP Privileges</span>
+    <span class="tag">Slack</span>
+    <span class="tag">DynamoDB</span>
+    <span class="tag">EventBridge</span>
+    <span class="tag">Node.js</span>
+    <span class="tag">macOS</span>
+  </div>
+</div>
+
+<div class="content">
+
+  <h2>The Problem</h2>
+
+  <p>Every IT team knows the conversation. A developer needs to install a dependency. An engineer needs to run a system-level diagnostic. A designer needs to update a font cache. The ask is always the same: <em>"Can you just make me a local admin for a bit?"</em></p>
+
+  <p>The traditional answers are both bad. Option A: give them permanent local admin rights, accept the expanded attack surface, and hope they don't accidentally break their system or run a malicious installer. Option B: have IT remote in every single time, creating a bottleneck that interrupts both the user and the IT team.</p>
+
+  <p>We wanted a third path: <strong>just-in-time admin access, approved in Slack, time-limited to 30 minutes, and fully audited</strong>. No persistent privilege. No IT babysitting. A complete audit trail of every command run during the window.</p>
+
+  <div class="callout success">
+    <p><strong>Goal:</strong> Users get self-service access in under 60 seconds. IT maintains approval control. Every session auto-expires. Every sudo command is logged and shipped to the Slack thread.</p>
+  </div>
+
+  <h2>How It Works</h2>
+
+  <div class="flow">
+    <div class="flow-step">
+      <div class="step-num">1</div>
+      <div class="step-text">
+        <strong>User opens Iru Self Service and clicks "Request Admin Access"</strong>
+        <span>A script prompts for a reason via osascript dialog, collects device identity (hostname, serial), and POSTs a signed request to an API Gateway endpoint.</span>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num">2</div>
+      <div class="step-text">
+        <strong>IT receives an interactive Slack approval message</strong>
+        <span>The request includes user, hostname, serial, and reason. Approve/Deny buttons are shown with a confirmation dialog. The message is posted to a dedicated IT channel.</span>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num">3</div>
+      <div class="step-text">
+        <strong>IT clicks Approve — Iru tag assigned + background approval monitor detects approval</strong>
+        <span>The elevation tag is added to the device. A background LaunchDaemon (installed by the Self Service script before it exits) polls the <code>/status</code> endpoint every 20 seconds. When it detects approval, it calls <code>iru run</code> directly on the device — the fastest path to processing Library Items without a full inventory collection. The user sees an "approved" alert within 20 seconds and is elevated shortly after.</span>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num">4</div>
+      <div class="step-text">
+        <strong>Device runs elevation-start.sh via Iru Library Item</strong>
+        <span>The script calls PrivilegesCLI --add to grant admin, enables a sudoers drop-in for command logging, notifies the backend to start the 30-minute timer, and installs a network monitor LaunchDaemon.</span>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num">5</div>
+      <div class="step-text">
+        <strong>EventBridge sends a 5-minute warning DM, then fires expiration at T+30</strong>
+        <span>Timers are anchored to when the device confirms elevation — not when IT clicks Approve — so the full 30 minutes is always available. EventBridge schedules auto-delete after firing.</span>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num">6</div>
+      <div class="step-text">
+        <strong>On expiration, Iru removes the tag and collects the sudo log</strong>
+        <span>A second Iru tag triggers collect-sudo-log.sh, which reads the sudoers logfile, ships it to the backend, and the backend uploads it as a file attachment in the original Slack approval thread.</span>
+      </div>
+    </div>
+  </div>
+
+  <h2>Architecture</h2>
+
+  <p>The backend is a fully serverless AWS SAM application. There's no always-on infrastructure — all compute is Lambda functions invoked by API Gateway or EventBridge Scheduler.</p>
+
+  <div class="arch-grid">
+    <div class="arch-card">
+      <h4>API Gateway + Lambda</h4>
+      <p>9 Lambda functions handle request intake, Slack actions, device confirmations, log receipt, status polling, and expiration. All endpoints are behind API key authentication.</p>
+    </div>
+    <div class="arch-card">
+      <h4>DynamoDB</h4>
+      <p>Single-table design stores each request's full lifecycle: status, timestamps, Slack thread IDs, Iru device ID, and actor identity for every state transition.</p>
+    </div>
+    <div class="arch-card">
+      <h4>EventBridge Scheduler</h4>
+      <p>One-time schedules are created per session for the 5-minute warning (T+25) and expiration (T+30). Schedules auto-delete after firing via ActionAfterCompletion: DELETE.</p>
+    </div>
+    <div class="arch-card">
+      <h4>Iru MDM</h4>
+      <p>Two Iru tags act as a signal layer. Assigning the elevation tag triggers the Privileges profile. Assigning the log-collection tag triggers log shipping. Device-side <code>iru run</code> forces immediate Library Item processing — <code>blankPush</code> only triggers an MDM check-in and cannot run custom scripts.</p>
+    </div>
+    <div class="arch-card">
+      <h4>SAP Privileges</h4>
+      <p>Open-source macOS app from SAP that provides controlled, time-limited local admin elevation via a LaunchAgent. Scoped via a Iru configuration profile so it only activates on tagged devices.</p>
+    </div>
+    <div class="arch-card">
+      <h4>System Keychain</h4>
+      <p>The shared API key is stored in the system keychain (accessible by root) via a provisioning script run once at device setup. Scripts retrieve it at runtime — never hardcoded.</p>
+    </div>
+  </div>
+
+  <h3>The Slack ↔ Lambda Handshake</h3>
+
+  <p>Slack requires a 200 response within 3 seconds of an interactive action. But processing an approval — hitting Iru, writing to DynamoDB, creating EventBridge schedules — takes longer. The solution is a two-Lambda pattern:</p>
+
+  <ol>
+    <li><code>handleSlackAction</code> verifies the Slack HMAC-SHA256 signature, extracts the action, and immediately invokes <code>processSlackAction</code> asynchronously (<code>InvocationType: 'Event'</code>).</li>
+    <li><code>handleSlackAction</code> returns 200 to Slack within milliseconds.</li>
+    <li><code>processSlackAction</code> runs independently and handles all the heavy work.</li>
+  </ol>
+
+  <p>Actor identity (Slack user ID and username of the IT admin who clicked) is forwarded from <code>handleSlackAction</code> to <code>processSlackAction</code> in the async payload and stored in DynamoDB for the audit trail.</p>
+
+  <h3>Timer Anchoring</h3>
+
+  <p>An early design mistake: the 30-minute timer was started at approval time. But there's latency between IT clicking Approve and the device actually being elevated — MDM check-in, Iru running the script, PrivilegesCLI executing. A user could lose 3–5 minutes of their window before they even had admin.</p>
+
+  <p>The fix: <code>elevation-start.sh</code> POSTs to a <code>/start</code> endpoint when elevation is confirmed on the device. The backend creates the EventBridge schedules from that timestamp. The user always gets a full 30 minutes from the moment they're actually elevated.</p>
+
+  <pre><code># elevation-start.sh — notify backend that elevation is confirmed
+HTTP_STATUS=$(curl -s -o "$ELEVATION_RESPONSE_FILE" -w "%{http_code}" \
+  -X POST "$API_ENDPOINT" \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: $API_KEY" \
+  --max-time 15 \
+  -d "{\"requestId\":\"$REQUEST_ID\",\"serial\":\"$SERIAL\"}")</code></pre>
+
+  <h2>Security Features</h2>
+
+  <p>After ten rounds of security audits, the system incorporates defense-in-depth across every layer:</p>
+
+  <div class="security-grid">
+    <div class="security-item">
+      <h4>Slack Signature Verification</h4>
+      <p>Every Slack webhook is verified with HMAC-SHA256 using the signing secret. Requests older than 5 minutes are rejected to prevent replay attacks. Timing-safe comparison via <code>crypto.timingSafeEqual</code>.</p>
+    </div>
+    <div class="security-item">
+      <h4>DynamoDB Conditional Writes</h4>
+      <p>All status transitions use <code>ConditionExpression</code> to enforce valid state machine transitions atomically. A race between two IT admins clicking Approve simultaneously results in exactly one approval, not two.</p>
+    </div>
+    <div class="security-item">
+      <h4>Input Validation Everywhere</h4>
+      <p>UUID format validation on all device-facing endpoints. Field length limits (reason: 500 chars, hostname: 255, serial: 14). Email format validation. Serial number validated as 8–14 uppercase alphanumeric on the device before embedding in generated scripts. All Lambda endpoints reject non-object JSON bodies (arrays, bare strings, null).</p>
+    </div>
+    <div class="security-item">
+      <h4>Slack mrkdwn Injection Prevention</h4>
+      <p>All user-controlled fields are passed through <code>escapeSlack()</code> before embedding in Slack Block Kit messages. Escapes <code>&amp;</code>, <code>&lt;</code>, <code>&gt;</code> to prevent link injection via Slack's <code>&lt;URL|text&gt;</code> syntax.</p>
+    </div>
+    <div class="security-item">
+      <h4>Device Identity Binding</h4>
+      <p>The serial number stored at request time is validated against every subsequent device call (<code>/start</code>, <code>/log</code>, <code>/revoke-network-loss</code>). A device can only interact with its own request — not another device's session.</p>
+    </div>
+    <div class="security-item">
+      <h4>Network Loss Revocation</h4>
+      <p>A LaunchDaemon polls every 60 seconds. If network is lost, PrivilegesCLI immediately removes admin. When connectivity returns, the device notifies the backend. The status check captures HTTP response codes separately — the body is only parsed on a confirmed 200 response. Auth errors (401/403) trigger fail-secure revocation rather than retrying.</p>
+    </div>
+    <div class="security-item">
+      <h4>IT Slash Command</h4>
+      <p><code>/admin-status</code> lets designated IT admins query active sessions directly from Slack. Access is restricted to a configured allowlist of Slack user IDs — any other user receives an error. Empty allowlist defaults to denying all access (fail closed).</p>
+    </div>
+    <div class="security-item">
+      <h4>Off-Hours Delegation</h4>
+      <p>Optional off-hours auto-approval routes requests to an on-call IT admin when business hours are outside the configured UTC window. Configuration errors (invalid hours, missing on-call ID) fail closed — requests are held for manual review, never auto-approved on misconfiguration.</p>
+    </div>
+    <div class="security-item">
+      <h4>Transient Failure Resilience</h4>
+      <p>Iru API calls use exponential backoff (1s, 2s) for 5xx and 429 responses — up to 3 attempts. 4xx responses throw immediately without retry. This prevents a single Iru rate-limit event from dropping an entire approval or expiration operation.</p>
+    </div>
+    <div class="security-item">
+      <h4>Partial Failure Resilience</h4>
+      <p>On expiration, elevation removal is the critical path — if it fails, EventBridge retries the whole handler. Log collection failure is non-critical: the record is still marked expired and IT is alerted via Slack, rather than leaving the session stuck in <code>approved</code> state.</p>
+    </div>
+    <div class="security-item">
+      <h4>Audit Trail &amp; Delayed Notifications</h4>
+      <p>Every state transition records the timestamp and actor. Approve/deny/revoke operations capture the IT admin's Slack user ID. User DMs on revocation or expiration are deliberately delayed until after sudo log collection succeeds — the user is not notified until the audit trail is secured.</p>
+    </div>
+    <div class="security-item">
+      <h4>Secrets Management</h4>
+      <p>API key stored in the macOS system keychain — never in scripts or environment variables. Lambda secrets injected via AWS SSM Parameter Store at deploy time. Module-load-time validation ensures Lambdas fail fast if secrets are missing.</p>
+    </div>
+    <div class="security-item">
+      <h4>Metadata Isolation &amp; Atomic Writes</h4>
+      <p>Session metadata is stored at <code>/var/root/.iru-elevation/meta.json</code> (mode 600, directory mode 700) — root-only. Writes use a <code>mktemp</code> + <code>mv</code> pattern so a process crash mid-write never leaves a partial file. Plist-embedded time values are validated as numeric before writing.</p>
+    </div>
+    <div class="security-item">
+      <h4>iru run Mutex Lock</h4>
+      <p>A file-based lock at <code>/var/run/iru-run.lock</code> prevents the approval monitor, network monitor, and expiration runner from calling <code>iru run</code> concurrently. Each caller waits up to 120 seconds before proceeding. The lock file lives in <code>/var/run/</code> and is cleared automatically on reboot.</p>
+    </div>
+    <div class="security-item">
+      <h4>Post-Run State Verification</h4>
+      <p>After each <code>iru run --reset-daily</code>, the approval monitor and network monitor verify that the expected system state change actually occurred (user is admin, or user is no longer admin). If not confirmed, a single retry fires after 120 seconds — accommodating Iru backend tag propagation latency — with a clear warning logged if the retry also fails.</p>
+    </div>
+  </div>
+
+  <h2>Key Design Decisions</h2>
+
+  <h3>Why Iru Tags as Signals?</h3>
+
+  <p>Iru Library Items can be scoped to specific device tags. By creating a Library Item (elevation-start.sh) scoped to the <code>temp-admin-elevation</code> tag, we get Iru's built-in delivery guarantees: retry on failure, run-at-install semantics, and immediate execution on blank push. We don't need to build our own device delivery mechanism — Iru handles it.</p>
+
+  <p>The same pattern applies to log collection: assigning the <code>temp-admin-log-collection</code> tag triggers collect-sudo-log.sh to run. When the script completes successfully, it removes the tag, preventing re-runs.</p>
+
+  <h3>Why SAP Privileges Instead of dseditgroup?</h3>
+
+  <p>Direct <code>dseditgroup</code> calls add the user to the local admin group and require a corresponding cleanup. SAP Privileges integrates with macOS's authorization model, provides a visible UI indicator to the user, supports an <code>ExpirationInterval</code> MDM key as a fallback safety net, and is open-source with active maintenance. The MDM profile approach also means the app is only functional on devices that have the profile — tagged devices only.</p>
+
+  <h3>Why Two Iru Tags?</h3>
+
+  <p>Separation of concerns. The elevation tag is removed on revocation or expiration. The log-collection tag is assigned on revocation or expiration. These two events are often simultaneous but not always (e.g., a network-loss revocation assigns the log tag immediately; the expiration timer also assigns it). Keeping them separate avoids race conditions and makes each Iru Library Item's trigger unambiguous.</p>
+
+  <h3>Why EventBridge Scheduler Instead of SQS Delayed Messages?</h3>
+
+  <p>EventBridge Scheduler supports named one-time schedules that can be deleted by name. This is critical for the revoke flow: if an IT admin manually revokes access at T+15, we need to cancel the T+25 warning and T+30 expiration schedules so they don't fire on an already-expired session. SQS delayed messages can't be cancelled after enqueuing.</p>
+
+  <h2>Lessons Learned</h2>
+
+  <div class="lesson">
+    <h4>The real attack surface is the device, not the backend</h4>
+    <p>Most of the interesting security findings were in the shell scripts — unvalidated data embedded in generated scripts, metadata files with wrong permissions, python subprocesses without timeouts. The Lambda code is easy to reason about; the device-side bash is where subtle bugs hide. Treat shell scripts as first-class security artifacts.</p>
+  </div>
+
+  <div class="lesson">
+    <h4>Race conditions require database-level guards, not application-level checks</h4>
+    <p>The pattern of "fetch → check status → update" is a TOCTOU race. Two concurrent Lambda invocations can both pass the check and both apply the update. DynamoDB's <code>ConditionExpression</code> moves the check into the atomic write operation. This is non-negotiable for state machines where each transition should happen exactly once.</p>
+  </div>
+
+  <div class="lesson">
+    <h4>Anchor timers to device confirmation, not approval</h4>
+    <p>Any time you have an async pipeline (approve → MDM deliver → device run → confirm), the end user's experience is only as good as the last step. Anchoring timers to device confirmation rather than IT approval cost one extra API call but resulted in users always getting the full 30-minute window they were promised.</p>
+  </div>
+
+  <div class="lesson">
+    <h4>Iterative security auditing finds what point-in-time reviews miss</h4>
+    <p>Running ten rounds of security audits on this codebase found meaningful issues in almost every round. Not because the earlier rounds were bad — but because fixing issues and adding features creates new surface area. Audit #6 alone found 11 findings introduced by the slash command, off-hours approval, and reason classification features. Build security review into your iteration cycle, not just your launch gate.</p>
+  </div>
+
+  <div class="lesson">
+    <h4>Zero open findings is achievable — but accept risk explicitly, not by omission</h4>
+    <p>Audit #10 closed all 12 remaining open findings. The four accepted-risk items (timing side-channels, SIGTERM suppression, async Lambda pattern, system keychain access) were each evaluated deliberately: the attack requires specific access that already implies compromise, or the fix would require architectural changes that break the MDM delivery model. Accepted risk with documented rationale is categorically different from unfixed risk with no explanation.</p>
+  </div>
+
+  <div class="lesson">
+    <h4>New features are new attack surface — review them immediately</h4>
+    <p>The slash command was the highest-severity new finding: Slack signature verification was in place, but no user authorization check existed. Any workspace member could enumerate all active admin sessions. The fix was three lines. The gap between "implemented" and "authorized" is where high-severity findings live.</p>
+  </div>
+
+  <div class="lesson">
+    <h4>Fail closed beats fail open, especially for access control</h4>
+    <p>The off-hours auto-approval feature had a subtle misconfiguration path: invalid UTC hour configuration defaulted to treating all time as off-hours, auto-approving every request without IT review. The correct behavior is the opposite — if you're not sure it's off-hours, require manual approval. Any access-control feature that grants permissions by default on config error is a security risk.</p>
+  </div>
+
+  <div class="lesson">
+    <h4>Escape at the output boundary, not at ingestion</h4>
+    <p>Early versions of the code tried to sanitize user input at ingestion time. This leads to double-encoding bugs and false confidence. The correct approach: store raw data, escape at every output boundary (Slack mrkdwn, JSON, shell variables). Each output context has different escaping requirements.</p>
+  </div>
+
+  <div class="lesson">
+    <h4>Never call a process runner from within a script being run by that process runner</h4>
+    <p><code>elevation-start.sh</code> was calling <code>iru run</code> at the end of its own execution — but this script <em>runs inside</em> a <code>iru run</code> triggered by the approval monitor. The Iru agent holds an internal lock during execution; a nested <code>iru run</code> waited indefinitely for that lock, freezing the outer agent. The fix was a single line removal: <code>iru run</code> inside a Iru script is a deadlock by construction.</p>
+  </div>
+
+  <div class="lesson">
+    <h4>Verify the check actually checks something</h4>
+    <p>The UTF-8 validation in <code>receiveLog</code> was <code>Buffer.from(x).equals(Buffer.from(x))</code> — a tautology that always returns true and never rejects anything. It passed code review because it <em>looked</em> correct. The Audit #8 find: always test security checks with an input that should fail. A check that never rejects is not a check.</p>
+  </div>
+
+  <h2>Stats After Ten Audit Rounds</h2>
+
+  <div class="stat-row">
+    <div class="stat"><div class="stat-num">10</div><div class="stat-label">Lambda functions</div></div>
+    <div class="stat"><div class="stat-num">5</div><div class="stat-label">Device shell scripts</div></div>
+    <div class="stat"><div class="stat-num">30m</div><div class="stat-label">Max elevation window</div></div>
+    <div class="stat"><div class="stat-num">&lt;60s</div><div class="stat-label">Approval → elevated</div></div>
+    <div class="stat"><div class="stat-num">~3s</div><div class="stat-label">Slack → approval latency</div></div>
+    <div class="stat"><div class="stat-num">88</div><div class="stat-label">Security fixes applied</div></div>
+  </div>
+
+  <h2>Recently Shipped</h2>
+
+  <ul>
+    <li><strong>Background approval monitor:</strong> The Self Service script now exits in under 5 seconds. A background LaunchDaemon installs at request time and polls for approval every 20 seconds — no more blocking the Iru Self Service app for minutes.</li>
+    <li><strong>Removed all <code>blankPush</code> calls:</strong> <code>blankPush</code> triggers an MDM check-in, not a Library Item run — it cannot invoke custom scripts. All server-side <code>blankPush</code> calls were removed; device-side <code>iru run</code> is now the exclusive mechanism for picking up tag changes.</li>
+    <li><strong>iru run mutex lock:</strong> Three background daemons (approval monitor, network monitor, expiration runner) could previously call <code>iru run</code> concurrently. A file lock at <code>/var/run/iru-run.lock</code> serializes all <code>iru run</code> invocations, eliminating agent contention.</li>
+    <li><strong>Delayed revocation DMs:</strong> Users are not notified when their access is revoked or expires until after sudo logs are successfully collected. The audit trail is secured before the user learns the session ended.</li>
+    <li><strong>Slack original message lifecycle:</strong> The original approval message (with Approve/Deny buttons) is now updated to a final "completed" state when log collection succeeds — showing the outcome and timeline, with all buttons removed.</li>
+    <li><strong>Fixed nested <code>iru run</code> deadlock:</strong> <code>elevation-start.sh</code> was calling <code>iru run</code> at the end of its own execution — but it runs <em>inside</em> a <code>iru run</code>. The Iru agent holds an internal lock during execution, so the nested call deadlocked the outer agent. Removed the redundant inner call.</li>
+    <li><strong>Switched to <code>iru run --reset-daily</code>:</strong> Plain <code>iru run</code> skips Library Items the agent has already processed today. <code>--reset-daily</code> forces full re-evaluation, ensuring the elevation or log-collection script always runs when the tag is assigned — even if the agent's daily run already completed.</li>
+    <li><strong>Post-run state verification with 120s retry:</strong> The approval monitor now confirms the user is actually admin after <code>iru run</code> completes. The network monitor confirms admin has been removed after revocation. If the expected state isn't confirmed, a single retry fires after 120 seconds — absorbing Iru backend tag propagation latency without requiring the user or IT to intervene.</li>
+    <li><strong>PID-aware mutex lock:</strong> The <code>iru run</code> lock file now stores the holding process's PID. If the holder was killed with SIGKILL, the dead PID is detected via <code>kill -0</code> and the stale lock is removed immediately — previously the 120-second timeout was the only recovery path.</li>
+    <li><strong>Atomic daemon cleanup:</strong> The approval monitor cleanup now removes the plist file before calling <code>launchctl remove &lt;label&gt;</code>, eliminating the window where a stale plist could exist on disk if the script was interrupted mid-cleanup.</li>
+    <li><strong>Off-hours failure visibility:</strong> If off-hours auto-approval fails (Lambda quota, permissions error), a warning is now posted to the IT Slack thread immediately — IT sees the request needs manual review rather than it silently staying in <code>pending</code> indefinitely.</li>
+    <li><strong>Degraded log warning:</strong> If timezone conversion fails during log collection, a visible <code>[WARNING: unified log source skipped]</code> header is prepended to the uploaded log file so IT knows the collection was degraded.</li>
+    <li><strong>Iru 4xx error logging:</strong> The first 200 characters of Iru API 4xx error responses are now logged — enabling diagnosis of "device not found" vs "invalid tag" failures without a separate API call.</li>
+  </ul>
+
+  <h2>What's Next</h2>
+
+  <ul>
+    <li><strong>Extended audit retention:</strong> Export DynamoDB records to S3 before TTL expiration for long-term compliance storage.</li>
+    <li><strong>Trend dashboard:</strong> Surface reason categories and per-team request frequency in a simple read-only view for IT leadership.</li>
+    <li><strong>Rotation-aware off-hours:</strong> Pull the on-call rotation from PagerDuty or a schedule table rather than a static Slack user ID.</li>
+  </ul>
+
+  <div class="callout">
+    <p>Questions or want to discuss the architecture? This was built for a macOS-first environment using Iru as the MDM, but the core pattern — Slack-gated JIT access with EventBridge timers and MDM tag signaling — translates to other MDM platforms with an API.</p>
+  </div>
+
+</div>
+
+<footer>
+  <p>Built by Bryan Kitchman &nbsp;·&nbsp; Temporary Admin Access Workflow &nbsp;·&nbsp; AWS SAM · Iru · SAP Privileges · Slack</p>
+</footer>
+
+</body>
+</html>

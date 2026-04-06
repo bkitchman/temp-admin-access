@@ -1,5 +1,5 @@
 const { v4: uuidv4 } = require('uuid');
-const kandji = require('../shared/kandji');
+const iru = require('../shared/iru');
 const slack = require('../shared/slack');
 const dynamo = require('../shared/dynamo');
 const { isValidEmail } = require('../shared/validate');
@@ -81,15 +81,15 @@ exports.handler = async (event) => {
     // Classify reason for IT visibility and trend analysis
     const reasonCategory = classifyReason(reason);
 
-    // 3. Look up device in Kandji by serial number
-    const device = await kandji.getDeviceBySerial(serial);
-    const kandjiDeviceId = device.device_id;
-    console.log('Resolved kandjiDeviceId:', kandjiDeviceId);
+    // 3. Look up device in Iru by serial number
+    const device = await iru.getDeviceBySerial(serial);
+    const iruDeviceId = device.device_id;
+    console.log('Resolved iruDeviceId:', iruDeviceId);
 
     // 4. Generate request ID
     const requestId = uuidv4();
 
-    // 5. Resolve the user's Slack ID using their email (provided by Kandji $EMAIL variable)
+    // 5. Resolve the user's Slack ID using their email (provided by Iru $EMAIL variable)
     const slackUserId = email ? await slack.lookupSlackUserByEmail(email) : null;
 
     // 6. Post interactive approval message to the IT Slack channel
@@ -109,7 +109,7 @@ exports.handler = async (event) => {
       slackThreadTs,
       slackUserId: slackUserId ?? null,
       requestingUserEmail: email ?? null,
-      kandjiDeviceId,
+      iruDeviceId,
       deviceSerial: serial,
       deviceHostname: hostname,
       requestingUser: username,

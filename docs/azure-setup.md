@@ -1,6 +1,6 @@
 # Azure Setup Guide
 
-This guide covers adapting the backend to run on Microsoft Azure. The Kandji scripts and Slack app configuration are **identical** to the AWS setup — only the backend infrastructure changes.
+This guide covers adapting the backend to run on Microsoft Azure. The Iru scripts and Slack app configuration are **identical** to the AWS setup — only the backend infrastructure changes.
 
 ---
 
@@ -115,7 +115,7 @@ az keyvault create \
 
 az keyvault secret set --vault-name $KEYVAULT_NAME --name slack-bot-token --value "xoxb-..."
 az keyvault secret set --vault-name $KEYVAULT_NAME --name slack-signing-secret --value "your-signing-secret"
-az keyvault secret set --vault-name $KEYVAULT_NAME --name kandji-api-token --value "your-kandji-token"
+az keyvault secret set --vault-name $KEYVAULT_NAME --name iru-api-token --value "your-iru-token"
 az keyvault secret set --vault-name $KEYVAULT_NAME --name self-service-api-key --value "your-api-key"
 az keyvault secret set --vault-name $KEYVAULT_NAME --name cosmos-connection-string --value "AccountEndpoint=..."
 ```
@@ -145,11 +145,11 @@ az functionapp config appsettings set \
   --settings \
     "SLACK_BOT_TOKEN=@Microsoft.KeyVault(VaultName=$KEYVAULT_NAME;SecretName=slack-bot-token)" \
     "SLACK_SIGNING_SECRET=@Microsoft.KeyVault(VaultName=$KEYVAULT_NAME;SecretName=slack-signing-secret)" \
-    "KANDJI_API_TOKEN=@Microsoft.KeyVault(VaultName=$KEYVAULT_NAME;SecretName=kandji-api-token)" \
+    "IRU_API_TOKEN=@Microsoft.KeyVault(VaultName=$KEYVAULT_NAME;SecretName=iru-api-token)" \
     "SELF_SERVICE_API_KEY=@Microsoft.KeyVault(VaultName=$KEYVAULT_NAME;SecretName=self-service-api-key)" \
     "COSMOS_CONNECTION_STRING=@Microsoft.KeyVault(VaultName=$KEYVAULT_NAME;SecretName=cosmos-connection-string)" \
     "SLACK_IT_CHANNEL_ID=C012AB3CD" \
-    "KANDJI_BASE_URL=https://yourorg.api.kandji.io" \
+    "IRU_BASE_URL=https://yourorg.api.iru.io" \
     "EMAIL_DOMAIN=company.com"
 ```
 
@@ -276,7 +276,7 @@ After deploy, update the Slack app's **Interactivity Request URL** and **Slash C
 
 ---
 
-## 8. Configure Kandji Scripts
+## 8. Configure Iru Scripts
 
 In the three device shell scripts, update the hardcoded API endpoint URLs to your Azure Function or API Management URLs. Everything else (keychain, PrivilegesCLI, log collection) is identical.
 
@@ -288,13 +288,13 @@ In the three device shell scripts, update the hardcoded API endpoint URLs to you
 |---|---|
 | `SLACK_BOT_TOKEN` | Key Vault reference |
 | `SLACK_SIGNING_SECRET` | Key Vault reference |
-| `KANDJI_API_TOKEN` | Key Vault reference |
+| `IRU_API_TOKEN` | Key Vault reference |
 | `SELF_SERVICE_API_KEY` | Key Vault reference |
 | `COSMOS_CONNECTION_STRING` | Key Vault reference (replaces DynamoDB config) |
 | `SLACK_IT_CHANNEL_ID` | App Setting |
-| `KANDJI_BASE_URL` | App Setting |
-| `KANDJI_ELEVATION_TAG` | App Setting |
-| `KANDJI_LOG_COLLECTION_TAG` | App Setting |
+| `IRU_BASE_URL` | App Setting |
+| `IRU_ELEVATION_TAG` | App Setting |
+| `IRU_LOG_COLLECTION_TAG` | App Setting |
 | `EMAIL_DOMAIN` | App Setting |
 
 ---

@@ -22,7 +22,7 @@ exports.handler = async (event) => {
     return;
   }
 
-  // Kandji has no API to push on-device notifications directly.
+  // Iru has no API to push on-device notifications directly.
   // Send a Slack DM instead — this is the primary warning channel.
   if (request.slackUserId) {
     await slack.sendDM(
