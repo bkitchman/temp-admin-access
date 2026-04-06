@@ -135,6 +135,16 @@
     font-size: .68rem; font-weight: 600; padding: .15rem .5rem; border-radius: 4px;
     background: #f1f5f9; color: var(--text-muted); font-family: 'JetBrains Mono', monospace;
   }
+  .project-actions { display: flex; align-items: center; justify-content: space-between; margin-top: 1.25rem; }
+  .project-action-link { font-size: .8rem; font-weight: 600; color: var(--blue-light); }
+  .project-action-video {
+    display: flex; align-items: center; gap: .35rem;
+    font-size: .75rem; font-weight: 600;
+    background: #fef2f2; color: #dc2626; border: 1px solid #fecaca;
+    border-radius: 6px; padding: .25rem .65rem; text-decoration: none;
+    transition: background .15s;
+  }
+  .project-action-video:hover { background: #fee2e2; }
   .project-arrow {
     position: absolute; bottom: 1.75rem; right: 1.75rem;
     color: var(--blue-light); font-size: 1rem; opacity: 0;
@@ -236,7 +246,10 @@
         <span class="project-tag">DynamoDB</span>
         <span class="project-tag">EventBridge</span>
       </div>
-      <span class="project-arrow">→</span>
+      <div class="project-actions">
+        <span class="project-action-link">Read more →</span>
+        <a href="https://youtu.be/mqxZDVmA0wI" class="project-action-video" target="_blank" rel="noopener" onclick="event.stopPropagation()">▶ Watch demo</a>
+      </div>
     </a>
 
     <div class="project-card fade-in" style="opacity:.6; cursor:default; pointer-events:none;">
