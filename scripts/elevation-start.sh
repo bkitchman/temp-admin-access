@@ -5,6 +5,7 @@
 #
 # Records the elevation start timestamp and automatically grants admin
 # access via PrivilegesCLI so the user doesn't need to open Privileges manually.
+umask 077  # ensure mktemp files are always 0600 regardless of calling environment
 
 # macOS does not ship the GNU `timeout` command. Provide a no-op fallback so scripts
 # run on all macOS versions; python3 calls are inherently short so the risk is minimal.
@@ -411,13 +412,25 @@ fi
 
 # If a network-loss revocation is pending, wait for network and notify backend
 if [ -f "\$REVOKE_PENDING_FLAG" ]; then
+  # Abandon retry after 2 hours — prevents infinite loop if backend is permanently unreachable
+  CREATED=\$(cat "\$REVOKE_PENDING_FLAG" 2>/dev/null || echo 0)
+  NOW=\$(date +%s)
+  if [ \$((NOW - CREATED)) -gt 7200 ]; then
+    echo "\$(ts) \$LOG_TAG: revoke-pending TTL exceeded (2h) — cleaning up"
+    cleanup_daemon
+    exit 0
+  fi
   if check_network; then
     echo "\$(ts) \$LOG_TAG: network restored — notifying backend of network-loss revocation"
+    REVOKE_PAYLOAD=\$(python3 -c "
+import json, sys
+print(json.dumps({'requestId': sys.argv[1], 'serial': sys.argv[2]}))
+" "\$REQUEST_ID" "\$SERIAL")
     HTTP_STATUS=\$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 \
       -X POST "\$REVOKE_ENDPOINT" \
       -H "Content-Type: application/json" \
       -H "x-api-key: \$API_KEY" \
-      -d "{\"requestId\":\"\$REQUEST_ID\",\"serial\":\"\$SERIAL\"}" 2>/dev/null)
+      -d "\$REVOKE_PAYLOAD" 2>/dev/null)
     echo "\$(ts) \$LOG_TAG: revoke-network-loss response HTTP \$HTTP_STATUS"
     if [ "\$HTTP_STATUS" = "200" ]; then
       echo "\$(ts) \$LOG_TAG: backend notified, cleaning up"
@@ -507,7 +520,7 @@ fi
 if ! check_network; then
   echo "\$(ts) \$LOG_TAG: network lost — revoking admin for \$CURRENT_USER"
   revoke_admin "Your temporary admin access was revoked because network connectivity was lost."
-  touch "\$REVOKE_PENDING_FLAG"
+  date +%s > "\$REVOKE_PENDING_FLAG"
   echo "\$(ts) \$LOG_TAG: pending flag set, will notify backend when network returns"
 else
   echo "\$(ts) \$LOG_TAG: network OK"

@@ -68,6 +68,11 @@ exports.handler = async (event) => {
       }
     }
 
+    // Validate serial format — uppercase alphanumeric, 8–14 chars (matches shell script validation)
+    if (!/^[A-Z0-9]{8,14}$/.test(serial)) {
+      return respond(400, { error: 'Invalid serial number format' });
+    }
+
     // Validate email format if provided
     if (email && !isValidEmail(email)) {
       return respond(400, { error: 'Invalid email format' });

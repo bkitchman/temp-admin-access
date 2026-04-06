@@ -7,6 +7,10 @@ const ROLE_ARN = process.env.EVENTBRIDGE_ROLE_ARN;
 // `invokeAt` must be an ISO8601 datetime string (e.g. "2024-01-15T14:30:00").
 // Returns the schedule ARN.
 async function createOneTimeSchedule({ name, invokeAt, targetLambdaArn, payload }) {
+  // Validate format before slicing — a short or malformed string would produce a silent bad expression
+  if (!invokeAt || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(invokeAt)) {
+    throw new Error(`createOneTimeSchedule: invalid invokeAt format: ${invokeAt}`);
+  }
   // Strip milliseconds — EventBridge at() expression requires exactly "yyyy-MM-ddTHH:mm:ss"
   const atExpression = invokeAt.slice(0, 19);
 

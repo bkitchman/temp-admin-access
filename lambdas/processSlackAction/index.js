@@ -199,12 +199,9 @@ async function handleLockDevice(request, requestId, actor) {
 async function handleApprove(request, requestId, actor) {
   const now = new Date();
 
-  // Assign the elevation tag — scopes SAP Privileges to the device.
-  // The device-side approval monitor detects approval via /status polling and
-  // calls `kandji run` directly to pick up the tag immediately.
-  await kandji.assignElevationTag(request.kandjiDeviceId);
-
-  // N3-02: conditional write — only approve if still pending (prevents double-approve race)
+  // N3-02: conditional write first — only approve if still pending (prevents double-approve race).
+  // N11-02: DynamoDB write must succeed before assigning the Kandji tag. If we tag first and the
+  // write races, the device is elevated but the session is untracked and will never expire.
   try {
     await dynamo.updateRequest(requestId, {
       status: 'approved',
@@ -217,11 +214,16 @@ async function handleApprove(request, requestId, actor) {
     });
   } catch (err) {
     if (err.name === 'ConditionalCheckFailedException') {
-      console.warn(`handleApprove: request ${requestId} already processed (race condition), skipping`);
+      console.warn(`handleApprove: request ${requestId} already processed (race condition), skipping Kandji tag`);
       return;
     }
     throw err;
   }
+
+  // Assign the elevation tag only after the state transition is committed.
+  // The device-side approval monitor detects approval via /status polling and
+  // calls `kandji run` directly to pick up the tag immediately.
+  await kandji.assignElevationTag(request.kandjiDeviceId);
 
   const approvedDmNote = request.slackUserId
     ? `DM sent to <@${request.slackUserId}>.`

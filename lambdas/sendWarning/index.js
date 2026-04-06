@@ -1,12 +1,13 @@
 const dynamo = require('../shared/dynamo');
 const slack = require('../shared/slack');
 const { escapeSlack } = slack;
+const { isValidUUID } = require('../shared/validate');
 
 exports.handler = async (event) => {
   const { requestId } = event;
 
-  if (!requestId) {
-    console.error('sendWarning: missing requestId in event payload');
+  if (!requestId || !isValidUUID(requestId)) {
+    console.error('sendWarning: missing or invalid requestId in event payload:', requestId);
     return;
   }
 

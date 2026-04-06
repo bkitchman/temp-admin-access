@@ -1,12 +1,13 @@
 const kandji = require('../shared/kandji');
 const slack = require('../shared/slack');
 const dynamo = require('../shared/dynamo');
+const { isValidUUID } = require('../shared/validate');
 
 exports.handler = async (event) => {
   const { requestId } = event;
 
-  if (!requestId) {
-    console.error('handleExpiration: missing requestId in event payload');
+  if (!requestId || !isValidUUID(requestId)) {
+    console.error('handleExpiration: missing or invalid requestId in event payload:', requestId);
     return;
   }
 

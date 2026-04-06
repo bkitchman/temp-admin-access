@@ -68,6 +68,7 @@ async function getDevice(deviceId) {
 // Get the current tags for a device
 async function getDeviceTags(deviceId) {
   const device = await getDevice(deviceId);
+  if (!device) throw new Error(`getDeviceTags: null response for device ${deviceId}`);
   return Array.isArray(device.tags) ? device.tags : [];
 }
 

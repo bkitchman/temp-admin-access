@@ -1,6 +1,7 @@
 #!/bin/bash
 # Kandji Self Service — Request Temporary Admin Access
 # Deploy as a Self Service script in the Kandji Library.
+umask 077  # ensure mktemp files are always 0600 regardless of calling environment
 
 # macOS does not ship the GNU `timeout` command. Provide a no-op fallback so scripts
 # run on all macOS versions; python3 calls are inherently short so the risk is minimal.

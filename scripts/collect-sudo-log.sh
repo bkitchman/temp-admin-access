@@ -2,6 +2,7 @@
 # Kandji Library Custom Script — Collect Sudo Log
 # Scope to tag: temp-admin-log-collection
 # Run: At install (i.e. when the log collection tag is assigned on expiration)
+umask 077  # ensure mktemp files are always 0600 regardless of calling environment
 #
 # Reads elevation metadata written by self-service-request.sh and elevation-start.sh,
 # collects sudo log entries for the elevation window, and ships them to the /log endpoint.

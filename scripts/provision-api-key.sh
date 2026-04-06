@@ -9,7 +9,12 @@
 KEYCHAIN="/Library/Keychains/System.keychain"
 SERVICE="kandji-temp-admin-api"
 ACCOUNT="kandji-temp-admin"
-API_KEY="e88870499d05c3071c13cf149eae16e0d14875d9c18d6598b65ee7a42d31ec5c"
+API_KEY="YOUR_API_KEY_HERE"
+
+if [ "$API_KEY" = "YOUR_API_KEY_HERE" ] || [ -z "$API_KEY" ]; then
+  echo "provision-api-key: ERROR — API_KEY has not been set. Replace YOUR_API_KEY_HERE with your SelfServiceApiKey value before uploading to Kandji." >&2
+  exit 1
+fi
 
 # Remove any existing entry first to allow clean re-provisioning
 security delete-generic-password \
