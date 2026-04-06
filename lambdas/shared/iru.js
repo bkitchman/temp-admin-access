@@ -9,6 +9,11 @@ const ELEVATION_TAG_10MIN = process.env.IRU_ELEVATION_TAG_10MIN;
 const ELEVATION_TAG_15MIN = process.env.IRU_ELEVATION_TAG_15MIN;
 const ELEVATION_TAG_30MIN = process.env.IRU_ELEVATION_TAG_30MIN;
 
+// Fail loudly at Lambda cold-start if any duration tag env var is missing
+if (!ELEVATION_TAG_5MIN || !ELEVATION_TAG_10MIN || !ELEVATION_TAG_15MIN || !ELEVATION_TAG_30MIN) {
+  throw new Error('Missing IRU elevation tag environment variable(s) — all four duration tags (5/10/15/30 min) must be configured');
+}
+
 const DURATION_TAG_MAP = {
   5:  ELEVATION_TAG_5MIN,
   10: ELEVATION_TAG_10MIN,

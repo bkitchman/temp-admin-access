@@ -2,7 +2,7 @@
 
 A self-service, Slack-approved, time-limited local admin elevation workflow for macOS endpoints managed by Iru MDM.
 
-Users request access through Iru Self Service, an IT admin approves or denies via Slack, the device is elevated for 30 minutes using [SAP Privileges](https://github.com/SAP/macOS-enterprise-privileges), and every `sudo` command during the session is captured and uploaded to the Slack thread on expiration.
+Users request access through Iru Self Service, choose a duration (5, 10, 15, or 30 minutes) and a reason category, an IT admin approves or denies via Slack with per-duration buttons, the device is elevated using [SAP Privileges](https://github.com/SAP/macOS-enterprise-privileges) for exactly the approved duration, and every `sudo` command during the session is captured and uploaded to the Slack thread on expiration.
 
 > Zero persistent privilege. No IT babysitting. Full audit trail.
 
@@ -11,26 +11,27 @@ Users request access through Iru Self Service, an IT admin approves or denies vi
 ## How It Works
 
 ```
-User (Self Service) → API Gateway → Slack approval message
-                                         ↓ IT clicks Approve
-                              Iru tag assigned → device polls /status
+User (Self Service) → picks duration (5/10/15/30 min) + reason category
+                    → API Gateway → Slack approval message with 4 duration buttons
+                                         ↓ IT clicks Approve (any duration)
+                    duration-specific Iru tag assigned → device polls /status
                                          ↓ tag detected
                               elevation-start.sh → PrivilegesCLI --add
-                              backend starts 30-min EventBridge timer
-                                         ↓ T+25
+                              backend starts N-min EventBridge timer
+                                         ↓ T+(N-5)  [skipped for 5-min sessions]
                               5-minute warning DM to user
-                                         ↓ T+30
-                              expiration: tag removed, log-collection tag assigned
+                                         ↓ T+N
+                              expiration: duration tag removed, log-collection tag assigned
                               collect-sudo-log.sh → ships log to /log endpoint
                               backend uploads sudo log to Slack thread
 ```
 
-1. **User requests access** — Iru Self Service script prompts for a reason, collects device identity (hostname, serial number), and POSTs a signed request to API Gateway.
-2. **IT gets an interactive Slack message** — includes user, hostname, serial, and reason with Approve/Deny buttons.
-3. **IT clicks Approve** — Iru elevation tag is assigned; a background LaunchDaemon on the device polls `/status` every 20 seconds and triggers `iru run --reset-daily` on detection.
-4. **Device runs `elevation-start.sh`** — grants admin via `PrivilegesCLI --add`, enables sudoers logging, notifies the backend to start the 30-minute timer, installs the network monitor daemon.
-5. **EventBridge sends a 5-minute warning DM** at T+25, then fires expiration at T+30.
-6. **On expiration** — the log-collection tag triggers `collect-sudo-log.sh`, which ships the session's `sudo` log back to the backend, which uploads it as a file attachment in the original Slack thread.
+1. **User requests access** — Iru Self Service script prompts for a reason, a duration (5/10/15/30 min), and a reason category; collects device identity; POSTs to API Gateway.
+2. **IT gets an interactive Slack message** — includes user, hostname, serial, reason category, and four duration-labeled Approve buttons (IT can override the requested duration) plus a Deny button.
+3. **IT clicks Approve** — a duration-specific Iru elevation tag is assigned; a background LaunchDaemon on the device polls `/status` every 20 seconds and triggers `iru run --reset-daily` on detection.
+4. **Device runs `elevation-start.sh`** — grants admin via `PrivilegesCLI --add`, enables sudoers logging, notifies the backend to start the N-minute timer, installs the network monitor daemon.
+5. **EventBridge sends a 5-minute warning DM** at T+(N-5) — skipped entirely for 5-minute sessions.
+6. **On expiration** — the duration-specific tag is removed; the log-collection tag triggers `collect-sudo-log.sh`, which ships the session's `sudo` log back to the backend, which uploads it as a file attachment in the original Slack thread.
 
 ---
 
@@ -43,7 +44,7 @@ Fully serverless — no always-on infrastructure.
 | **API Gateway + Lambda** | 9 functions: request intake, Slack action handling, device confirmation, status polling, log receipt, expiration |
 | **DynamoDB** | Single-table: full request lifecycle, status, Slack thread IDs, actor identity for audit trail |
 | **EventBridge Scheduler** | One-time schedules per session for T+25 warning and T+30 expiration; auto-delete after firing |
-| **Iru MDM** | Two tags act as a signal layer — elevation tag triggers Privileges profile; log-collection tag triggers log shipping |
+| **Iru MDM** | Five tags act as a signal layer — four duration-specific elevation tags (5/10/15/30 min) each scope their own SAP Privileges profile; log-collection tag triggers log shipping |
 | **SAP Privileges** | Controlled, time-limited admin elevation via a Iru configuration profile |
 | **System Keychain** | API key stored at device setup via `provision-api-key.sh`; retrieved at runtime by scripts, never hardcoded |
 
@@ -136,7 +137,7 @@ Take `SlackActionsEndpoint` and `SlashCommandEndpoint` from SAM Outputs and past
 Take `RequestEndpoint`, `StatusEndpoint`, `ElevationStartEndpoint`, and `LogEndpoint` from SAM Outputs and update the constants at the top of each script in `scripts/`.
 
 **7. Configure Iru**
-Create the two tags, upload the Privileges MDM profile, and upload device scripts. See [`docs/iru-setup.md`](docs/iru-setup.md).
+Create the five tags, upload the four duration-specific Privileges MDM profiles, and upload device scripts. See [`docs/iru-setup.md`](docs/iru-setup.md).
 
 **8. Provision API key on devices**
 ```bash
@@ -180,7 +181,7 @@ cd kst-repo && kst script sync
 
 ## Key Design Decisions
 
-**Timer anchored to device elevation** — The 30-minute window starts when the device confirms elevation via `POST /start`, not when IT clicks Approve. This ensures users always get a full 30 minutes from the moment they actually have admin.
+**Timer anchored to device elevation** — The N-minute window starts when the device confirms elevation via `POST /start`, not when IT clicks Approve. This ensures users always get the full approved duration from the moment they actually have admin.
 
 **`iru run --reset-daily`** — All device daemons use `--reset-daily` to force re-evaluation of scoped Library Items. Plain `iru run` skips items already processed today and won't pick up tag changes.
 

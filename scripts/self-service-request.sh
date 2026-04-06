@@ -8,6 +8,7 @@ umask 077  # ensure mktemp files are always 0600 regardless of calling environme
 if ! command -v timeout &>/dev/null; then
   timeout() { local _t=$1; shift; "$@"; }
 fi
+ts() { date '+%Y-%m-%d %H:%M:%S'; }
 
 API_ENDPOINT="https://1mng27frfb.execute-api.us-east-1.amazonaws.com/Prod/request"
 RESPONSE_FILE=$(mktemp /tmp/iru-request-XXXXXX)
@@ -119,8 +120,12 @@ if [ "$DURATION_CHOICE" = "cancel" ] || [ -z "$DURATION_CHOICE" ]; then
   echo "$(ts) self-service-request: user cancelled duration selection" >&2
   exit 0
 fi
-# Extract just the number
+# Extract just the number and validate against allowed values
 DURATION_MINUTES=$(echo "$DURATION_CHOICE" | grep -oE '^[0-9]+')
+if ! [[ "$DURATION_MINUTES" =~ ^(5|10|15|30)$ ]]; then
+  echo "$(ts) self-service-request: invalid duration extracted: '$DURATION_MINUTES'" >&2
+  exit 1
+fi
 
 # Category picker
 CATEGORY_CHOICE=$(launchctl asuser "$CURRENT_USER_UID" sudo -u "$USERNAME" osascript <<'OSASCRIPT'

@@ -1,15 +1,18 @@
 # Iru Setup Guide
 
-## 1. Create the Two Tags
+## 1. Create the Five Tags
 
-In the Iru web console, go to **Devices → Tags** and create both tags:
+In the Iru web console, go to **Devices → Tags** and create all five tags:
 
-| Tag | Purpose |
-|---|---|
-| `temp-admin-elevation` | Assigned on approval — scopes SAP Privileges and `elevation-start.sh` |
-| `temp-admin-log-collection` | Assigned on expiration/revocation — triggers `collect-sudo-log.sh` |
+| Tag | SAM Parameter | Purpose |
+|---|---|---|
+| `temp-admin-elevation-5min` | `IruElevationTag5Min` | Assigned on 5-min approval — scopes SAP Privileges profile |
+| `temp-admin-elevation-10min` | `IruElevationTag10Min` | Assigned on 10-min approval — scopes SAP Privileges profile |
+| `temp-admin-elevation-15min` | `IruElevationTag15Min` | Assigned on 15-min approval — scopes SAP Privileges profile |
+| `temp-admin-elevation-30min` | `IruElevationTag30Min` | Assigned on 30-min approval — scopes SAP Privileges profile |
+| `temp-admin-log-collection` | `IruLogCollectionTag` | Assigned on expiration/revocation — triggers `collect-sudo-log.sh` |
 
-The tag names must match the `IruElevationTag` and `IruLogCollectionTag` SAM parameters exactly.
+The tag names must match the corresponding SAM parameter values exactly.
 
 ---
 
@@ -22,16 +25,24 @@ The tag names must match the `IruElevationTag` and `IruLogCollectionTag` SAM par
 
 ---
 
-## 3. Upload the Privileges MDM Configuration Profile
+## 3. Upload the SAP Privileges MDM Configuration Profiles
+
+The system uses four duration-specific mobileconfig profiles — one per approved duration. Each profile sets `ExpirationInterval` to enforce SAP Privileges' built-in auto-demotion timer as a safety backstop if the Lambda expiration fails.
+
+The profiles are pre-built and can be uploaded via the Iru API (see `scripts/` for the upload commands) or manually through the console:
 
 1. Go to **Library → Add Library Item → Custom Profile**.
-2. Upload `infrastructure/privileges-config.mobileconfig` from this repository.
-3. Before uploading, replace the placeholder UUID values — generate two UUIDs (e.g. with `uuidgen` on macOS) and substitute them for the `<!-- generate a UUID -->` comments.
-4. Under **Assignment Rules**, scope to devices with the tag `temp-admin-elevation`.
+2. Upload each of the four profiles from `kst-repo/profiles/`:
+   - `SAP Privileges - 5 min/` → scope to tag `temp-admin-elevation-5min`
+   - `SAP Privileges - 10 min/` → scope to tag `temp-admin-elevation-10min`
+   - `SAP Privileges - 15 min/` → scope to tag `temp-admin-elevation-15min`
+   - `SAP Privileges - 30 min/` → scope to tag `temp-admin-elevation-30min`
+3. For each profile, set **Assignment Rules** → scope to the matching duration tag only.
+4. Set **Continuously Enforce** so the profile is removed when the elevation tag is revoked.
 
-The profile configures:
+Each profile configures:
+- `ExpirationInterval: <N>` — SAP Privileges auto-demotes after N minutes (safety backstop)
 - `EnforcePrivileges: user` — default state is standard user
-- `DockToggleTimeout: 30` — backstop auto-demotion after 30 min (safety net if Lambda fails)
 - `ReasonRequired: false` — user already provided a reason at request time
 
 ---
@@ -88,7 +99,7 @@ STATUS_ENDPOINT="https://YOUR_API_GATEWAY_URL/Prod/status"
 |---|---|
 | Name | `SAP: 3-elevation-start` |
 | Execution Frequency | Every day (runs at install / tag assignment) |
-| Assignment Rules | Scope to tag `temp-admin-elevation` |
+| Assignment Rules | Scope to **any** of the four elevation tags (OR condition): `temp-admin-elevation-5min`, `temp-admin-elevation-10min`, `temp-admin-elevation-15min`, `temp-admin-elevation-30min` |
 
 Before uploading, update the API endpoint:
 ```bash
@@ -140,10 +151,11 @@ Your tenant API base URL is `https://<subdomain>.api.iru.io`. Find it at **Setti
 
 ## 7. Verify the Flow
 
-1. Assign the `temp-admin-elevation` tag to a test device manually in Iru.
+1. Assign `temp-admin-elevation-15min` to a test device manually in Iru.
 2. Confirm `elevation-start.sh` runs and the user gains admin.
 3. Remove the tag — confirm admin is revoked.
 4. Assign `temp-admin-log-collection` — confirm `collect-sudo-log.sh` runs and a log appears in Slack.
 5. Remove the tag.
+6. Repeat step 1 with each of the other three duration tags to confirm all four profiles activate correctly.
 
-Once this works manually, the Lambda functions will drive tag assignment automatically via the API.
+Once this works manually, the Lambda functions will drive tag assignment automatically via the API, using the duration chosen by the user at request time.

@@ -48,7 +48,7 @@ exports.handler = async (event) => {
     if (actionId === 'deny_request') {
       await handleDeny(request, requestId, actor);
     } else {
-      const approveMatch = actionId.match(/^approve_(\d+)$/);
+      const approveMatch = actionId.match(/^approve_(5|10|15|30)$/);
       if (approveMatch) {
         const resolvedDuration = approvedDuration ?? parseInt(approveMatch[1], 10);
         if (![5, 10, 15, 30].includes(resolvedDuration)) {

@@ -24,8 +24,11 @@ exports.handler = async (event) => {
 
   // 1. Remove the elevation tag — critical path.
   //    If this fails, throw so EventBridge retries the whole expiration.
-  await iru.removeElevationTag(request.iruDeviceId);
-  console.log(`handleExpiration: removed elevation tag from device ${request.iruDeviceId}`);
+  //    Use the stored per-request tag; fall back to the 30-min tag for older requests
+  //    created before duration-specific tags were introduced.
+  const tagToRemove = request.assignedElevationTag || process.env.IRU_ELEVATION_TAG_30MIN;
+  await iru.removeTagByName(request.iruDeviceId, tagToRemove);
+  console.log(`handleExpiration: removed elevation tag ${tagToRemove} from device ${request.iruDeviceId}`);
 
   // 2. Assign log collection tag and trigger check-in.
   //    N5-03: wrap separately — if these fail, elevation is already revoked so we still

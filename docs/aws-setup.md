@@ -46,6 +46,11 @@ This prompts for all parameter values and saves them to `samconfig.toml`. At min
 | `SlackItChannelId` | Right-click channel in Slack → View channel details |
 | `IruApiToken` | Iru Settings → Access → API Token |
 | `IruBaseUrl` | Iru Settings → Access → API URL |
+| `IruElevationTag5Min` | Iru tag name for 5-min sessions (default: `temp-admin-elevation-5min`) |
+| `IruElevationTag10Min` | Iru tag name for 10-min sessions (default: `temp-admin-elevation-10min`) |
+| `IruElevationTag15Min` | Iru tag name for 15-min sessions (default: `temp-admin-elevation-15min`) |
+| `IruElevationTag30Min` | Iru tag name for 30-min sessions (default: `temp-admin-elevation-30min`) |
+| `IruLogCollectionTag` | Iru tag name that triggers sudo log collection (default: `temp-admin-log-collection`) |
 | `SelfServiceApiKey` | Generate a random string: `openssl rand -hex 32` |
 | `EmailDomain` | Your company's email domain, e.g. `company.com` |
 
@@ -125,9 +130,9 @@ The SAM template creates:
 | `admin-access-handleRequest` | Lambda | Receives Self Service POST, posts Slack approval |
 | `admin-access-handleSlackAction` | Lambda | Verifies Slack signature, async-invokes processSlackAction |
 | `admin-access-processSlackAction` | Lambda | Approve/deny/revoke logic, Iru tags, EventBridge schedules |
-| `admin-access-handleElevationStart` | Lambda | Starts 30-min timer when device confirms elevation |
-| `admin-access-sendWarning` | Lambda | Sends 5-minute warning DM (EventBridge T+25) |
-| `admin-access-handleExpiration` | Lambda | Removes tag, assigns log-collection tag (EventBridge T+30) |
+| `admin-access-handleElevationStart` | Lambda | Starts timer (5/10/15/30 min) when device confirms elevation |
+| `admin-access-sendWarning` | Lambda | Sends 5-minute warning DM (skipped for 5-min sessions) |
+| `admin-access-handleExpiration` | Lambda | Removes duration-specific tag, assigns log-collection tag |
 | `admin-access-revokeNetworkLoss` | Lambda | Records network-loss revocation |
 | `admin-access-getStatus` | Lambda | Returns request status for device polling |
 | `admin-access-handleSlashCommand` | Lambda | Handles `/admin-status` slash command |

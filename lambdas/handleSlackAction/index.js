@@ -25,6 +25,13 @@ exports.handler = async (event) => {
   const action = payload.actions?.[0];
   if (!action) return respond(200, '');
 
+  // Reject any action_id not in the known allowlist — prevents spoofed Slack payloads
+  const VALID_ACTIONS = new Set(['approve_5', 'approve_10', 'approve_15', 'approve_30', 'deny_request', 'revoke_request', 'lock_device']);
+  if (!VALID_ACTIONS.has(action.action_id)) {
+    console.warn(`handleSlackAction: rejecting unknown action_id: ${action.action_id}`);
+    return respond(200, '');
+  }
+
   // 3. Invoke processSlackAction asynchronously — fire and forget.
   //    InvocationType: 'Event' returns immediately without waiting for the result.
   //    Include the actor's Slack identity for audit logging (N3-01).

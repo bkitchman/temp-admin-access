@@ -335,7 +335,7 @@
 
     <p class="fade-in">The traditional answers are both bad. Option A: give them permanent local admin rights, accept the expanded attack surface, and hope they don't accidentally break their system or run a malicious installer. Option B: have IT remote in every single time, creating a bottleneck that interrupts both the user and the IT team.</p>
 
-    <p class="fade-in">I wanted a third path: <strong>just-in-time admin access, approved in Slack, time-limited to 30 minutes, and fully audited</strong>. No persistent privilege. No IT babysitting. A complete audit trail of every command run during the window.</p>
+    <p class="fade-in">I wanted a third path: <strong>just-in-time admin access, approved in Slack, time-limited to 5–30 minutes, and fully audited</strong>. No persistent privilege. No IT babysitting. A complete audit trail of every command run during the window.</p>
 
     <div class="callout success fade-in">
       <span class="callout-icon"></span>
@@ -360,35 +360,35 @@
         <div class="step-num">1</div>
         <div class="step-text">
           <strong>User opens Iru Self Service and clicks "Request Admin Access"</strong>
-          <span>A script prompts for a reason via osascript dialog, collects device identity (hostname, serial), and POSTs a signed request to an API Gateway endpoint.</span>
+          <span>A script prompts for a reason, a duration (5, 10, 15, or 30 minutes), and a reason category (Install, Debug, Config, Security, Developer, Other) via osascript dialogs. Collects device identity (hostname, serial) and POSTs a signed request to an API Gateway endpoint.</span>
         </div>
       </div>
       <div class="flow-step">
         <div class="step-num">2</div>
         <div class="step-text">
           <strong>IT receives an interactive Slack approval message</strong>
-          <span>The request includes user, hostname, serial, and reason. Approve/Deny buttons are shown with a confirmation dialog. Posted to a dedicated IT channel.</span>
+          <span>The message shows user, hostname, serial, reason, and category. IT sees four duration-labeled Approve buttons (5/10/15/30 min) — they can approve at the user's requested duration or override it — plus a Deny button. Posted to a dedicated IT channel.</span>
         </div>
       </div>
       <div class="flow-step">
         <div class="step-num">3</div>
         <div class="step-text">
-          <strong>IT clicks Approve — Iru tag assigned + background approval monitor detects it</strong>
-          <span>A background LaunchDaemon polls <code>/status</code> every 20 seconds. On approval, it calls <code>iru run</code> directly — the fastest path to processing Library Items. The user sees an "approved" alert within 20 seconds.</span>
+          <strong>IT clicks Approve — duration-specific Iru tag assigned + background monitor detects it</strong>
+          <span>A background LaunchDaemon polls <code>/status</code> every 20 seconds. On approval, it calls <code>iru run</code> directly — the fastest path to processing Library Items. The user sees an "approved" alert within 20 seconds. Each duration maps to a distinct Iru tag, which scopes its own SAP Privileges MDM profile with the matching <code>ExpirationInterval</code>.</span>
         </div>
       </div>
       <div class="flow-step">
         <div class="step-num">4</div>
         <div class="step-text">
           <strong>Device runs elevation-start.sh via Iru Library Item</strong>
-          <span>Calls <code>PrivilegesCLI --add</code> to grant admin, enables a sudoers drop-in for command logging, notifies the backend to start the 30-minute timer, installs a network monitor LaunchDaemon.</span>
+          <span>Calls <code>PrivilegesCLI --add</code> to grant admin, enables a sudoers drop-in for command logging, notifies the backend to start the N-minute timer (where N is the approved duration), installs a network monitor LaunchDaemon.</span>
         </div>
       </div>
       <div class="flow-step">
         <div class="step-num">5</div>
         <div class="step-text">
-          <strong>EventBridge sends a 5-minute warning DM, then fires expiration at T+30</strong>
-          <span>Timers are anchored to when the <em>device</em> confirms elevation — not when IT clicks Approve. The user always gets the full 30 minutes.</span>
+          <strong>EventBridge sends a 5-minute warning DM, then fires expiration at T+N</strong>
+          <span>Timers are anchored to when the <em>device</em> confirms elevation — not when IT clicks Approve. The user always gets the full approved duration. The warning DM is skipped entirely for 5-minute sessions (a T+0 warning would be instant noise).</span>
         </div>
       </div>
       <div class="flow-step">
