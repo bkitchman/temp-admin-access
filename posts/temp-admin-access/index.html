@@ -416,7 +416,7 @@
         <div class="step-num">4</div>
         <div class="step-text">
           <strong>Device runs elevation-start.sh via Iru Library Item</strong>
-          <span>Calls <code>PrivilegesCLI --add</code> to grant admin, enables a sudoers drop-in for command logging, notifies the backend to start the N-minute timer (where N is the approved duration), installs a network monitor LaunchDaemon.</span>
+          <span>Calls <code>PrivilegesCLI --add</code> to grant admin, enables a sudoers drop-in for command logging, notifies the backend to start the N-minute timer, and starts a persistent network monitor LaunchDaemon. The monitor loops continuously — checking admin group membership every 1s, network every 5s, and backend status every 60s. If network is lost, admin is stripped immediately and re-elevation attempts via the Privileges app are blocked within 1 second until connectivity is restored.</span>
         </div>
       </div>
       <div class="screenshot-wrap fade-in">
@@ -540,8 +540,10 @@ HTTP_STATUS=$(curl -s -o "$ELEVATION_RESPONSE_FILE" -w "%{http_code}" \
         <p>Serial stored at request time is validated against every subsequent device call. A device can only interact with its own session — not another device's.</p>
       </div>
       <div class="security-item">
-        <h4>Network Loss Revocation</h4>
-        <p>LaunchDaemon polls every 60 seconds. Network loss triggers immediate admin removal. Auth errors (401/403) fail-secure rather than retry.</p>
+        <h4>Network Loss Revocation &amp; Offline Enforcement</h4>
+        <p>The network monitor runs as a <strong>persistent loop</strong> — not a periodic LaunchDaemon job — so timing is no longer dependent on a 60-second <code>StartInterval</code>. Admin group membership is checked every <strong>1 second</strong>. Network connectivity is checked every <strong>5 seconds</strong> via <code>curl</code> to <code>captive.apple.com</code> (requiring HTTP 200 exactly — not just any response). Backend status is polled every 60 seconds.</p>
+        <p>When network loss is detected, admin is stripped immediately and an offline enforcement loop begins: the SAP Privileges mobileconfig remains on the device while offline (it can't be removed without MDM connectivity), so a user could theoretically re-elevate themselves via the Privileges app. The loop strips the admin group membership within 1 second of any re-elevation attempt — both via <code>PrivilegesCLI --remove</code> and directly via <code>dscl</code>. The loop runs until network is restored and the backend is notified, or a 2-hour TTL expires.</p>
+        <p>Auth errors (401/403) from the backend fail-secure — access is revoked immediately rather than retried. HTTP <code>000</code> (no response) is treated as network loss rather than a transient error.</p>
       </div>
       <div class="security-item">
         <h4>IT Slash Command</h4>
