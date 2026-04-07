@@ -1,5 +1,13 @@
 # Iru Setup Guide
 
+> **Version note:** This guide applies to all versions (v1.0.0–v1.2.0). The core tag and script setup is identical across versions. Version-specific differences are called out inline.
+>
+> - **v1.0.0:** Three scripts, one duration tag, no log collection tag.
+> - **v1.1.0:** Three scripts, four duration tags, one log collection tag, network monitor daemon.
+> - **v1.2.0:** Same as v1.1.0 — script syncing via `sync-scripts.sh` replaces `kst`.
+
+---
+
 ## 1. Create the Five Tags
 
 In the Iru web console, go to **Devices → Tags** and create all five tags:
@@ -13,6 +21,8 @@ In the Iru web console, go to **Devices → Tags** and create all five tags:
 | `temp-admin-log-collection` | `IruLogCollectionTag` | Assigned on expiration/revocation — triggers `collect-sudo-log.sh` |
 
 The tag names must match the corresponding SAM parameter values exactly.
+
+> **v1.0.0:** Only one elevation tag (`temp-admin-elevation`) and no log collection tag. The four-tag model was introduced in v1.1.0.
 
 ---
 
@@ -29,14 +39,14 @@ The tag names must match the corresponding SAM parameter values exactly.
 
 The system uses four duration-specific mobileconfig profiles — one per approved duration. Each profile sets `ExpirationInterval` to enforce SAP Privileges' built-in auto-demotion timer as a safety backstop if the Lambda expiration fails.
 
-The profiles are pre-built and can be uploaded via the Iru API (see `scripts/` for the upload commands) or manually through the console:
+A template profile is at `infrastructure/privileges-config.mobileconfig`. Generate the four profiles from the template or upload manually through the console:
 
 1. Go to **Library → Add Library Item → Custom Profile**.
-2. Upload each of the four profiles from `kst-repo/profiles/`:
-   - `SAP Privileges - 5 min/` → scope to tag `temp-admin-elevation-5min`
-   - `SAP Privileges - 10 min/` → scope to tag `temp-admin-elevation-10min`
-   - `SAP Privileges - 15 min/` → scope to tag `temp-admin-elevation-15min`
-   - `SAP Privileges - 30 min/` → scope to tag `temp-admin-elevation-30min`
+2. Upload four profiles (one per duration), each with the appropriate `ExpirationInterval` value:
+   - `SAP Privileges - 5 min` → `ExpirationInterval: 5` → scope to tag `temp-admin-elevation-5min`
+   - `SAP Privileges - 10 min` → `ExpirationInterval: 10` → scope to tag `temp-admin-elevation-10min`
+   - `SAP Privileges - 15 min` → `ExpirationInterval: 15` → scope to tag `temp-admin-elevation-15min`
+   - `SAP Privileges - 30 min` → `ExpirationInterval: 30` → scope to tag `temp-admin-elevation-30min`
 3. For each profile, set **Assignment Rules** → scope to the matching duration tag only.
 4. Set **Continuously Enforce** so the profile is removed when the elevation tag is revoked.
 
@@ -49,9 +59,29 @@ Each profile configures:
 
 ## 4. Upload the Shell Scripts
 
-There are three scripts to add as Iru Library Items. Use [kst](https://github.com/iru-inc/kst) to manage them (recommended), or upload manually.
+There are three scripts to add as Iru Library Items. In v1.2.0+, use `sync-scripts.sh` (recommended). For earlier versions, use [kst](https://github.com/iru-inc/kst) or upload manually.
 
-### Option A: kst (recommended)
+### Option A: `sync-scripts.sh` (v1.2.0+ — recommended)
+
+`sync-scripts.sh` uses the Iru API directly to update Library Item script bodies. It reads Library Item IDs from `infrastructure/iru-library-ids.conf` — edit that file to map your Iru Library Item IDs to script filenames.
+
+```bash
+# Set a write-access Iru API token (separate from the read-only IRU_API_TOKEN)
+export IRU_WRITE_API_TOKEN="your-iru-write-token"
+
+# Sync all scripts
+cd infrastructure && ./sync-scripts.sh
+
+# Or sync a single script by partial name match
+./sync-scripts.sh collect-sudo
+```
+
+Before syncing, update the hardcoded API endpoint URLs at the top of each script in `scripts/`:
+- `self-service-request.sh`: `API_ENDPOINT` and `STATUS_ENDPOINT`
+- `elevation-start.sh`: `API_ENDPOINT`
+- `collect-sudo-log.sh`: `API_ENDPOINT`
+
+### Option B: kst (v1.1.0 and earlier)
 
 ```bash
 # Install kst
@@ -73,7 +103,7 @@ cp ../scripts/collect-sudo-log.sh      "scripts/SAP_ 4-collect-sudo-log/audit"
 kst script sync
 ```
 
-### Option B: Manual upload
+### Option C: Manual upload
 
 For each script, go to **Library → Add Library Item → Custom Script** and paste the script contents.
 
@@ -147,6 +177,8 @@ sudo ./scripts/provision-api-key.sh "your-self-service-api-key"
 
 Your tenant API base URL is `https://<subdomain>.api.iru.io`. Find it at **Settings → Access → API URL**. This is your `IRU_BASE_URL` SAM parameter.
 
+> **For `sync-scripts.sh`:** Create a separate write-access token (`IRU_WRITE_API_TOKEN`) with Library Items write permission. This is separate from the read/device-write `IRU_API_TOKEN` used by Lambdas.
+
 ---
 
 ## 7. Verify the Flow
@@ -157,5 +189,7 @@ Your tenant API base URL is `https://<subdomain>.api.iru.io`. Find it at **Setti
 4. Assign `temp-admin-log-collection` — confirm `collect-sudo-log.sh` runs and a log appears in Slack.
 5. Remove the tag.
 6. Repeat step 1 with each of the other three duration tags to confirm all four profiles activate correctly.
+
+> **v1.2.0:** After step 4, the sudo log should also appear in the IT admin dashboard under the user's request history. The AI risk score in the Slack approval message updates after each log is received.
 
 Once this works manually, the Lambda functions will drive tag assignment automatically via the API, using the duration chosen by the user at request time.

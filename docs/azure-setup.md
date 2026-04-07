@@ -1,5 +1,9 @@
 # Azure Setup Guide
 
+> **Version note:** This guide covers adapting the **v1.1.0 (stable)** feature set to Azure. The core workflow (request → Slack approval → Iru tag → elevation → log collection) maps cleanly to Azure services.
+>
+> **v1.2.0 features that are AWS-specific:** The AI risk dashboard (S3/CloudFront), Amazon Bedrock risk scoring, and dashboard session tokens have no direct Azure equivalents and are not covered here. If you need these features, use the AWS deployment.
+
 This guide covers adapting the backend to run on Microsoft Azure. The Iru scripts and Slack app configuration are **identical** to the AWS setup — only the backend infrastructure changes.
 
 ---
@@ -284,18 +288,23 @@ In the three device shell scripts, update the hardcoded API endpoint URLs to you
 
 ## Environment Variables Reference
 
-| Variable | Source |
-|---|---|
-| `SLACK_BOT_TOKEN` | Key Vault reference |
-| `SLACK_SIGNING_SECRET` | Key Vault reference |
-| `IRU_API_TOKEN` | Key Vault reference |
-| `SELF_SERVICE_API_KEY` | Key Vault reference |
-| `COSMOS_CONNECTION_STRING` | Key Vault reference (replaces DynamoDB config) |
-| `SLACK_IT_CHANNEL_ID` | App Setting |
-| `IRU_BASE_URL` | App Setting |
-| `IRU_ELEVATION_TAG` | App Setting |
-| `IRU_LOG_COLLECTION_TAG` | App Setting |
-| `EMAIL_DOMAIN` | App Setting |
+| Variable | Version | Source |
+|---|---|---|
+| `SLACK_BOT_TOKEN` | All | Key Vault reference |
+| `SLACK_SIGNING_SECRET` | All | Key Vault reference |
+| `IRU_API_TOKEN` | All | Key Vault reference |
+| `SELF_SERVICE_API_KEY` | All | Key Vault reference |
+| `COSMOS_CONNECTION_STRING` | All | Key Vault reference (replaces DynamoDB config) |
+| `SLACK_IT_CHANNEL_ID` | All | App Setting |
+| `IRU_BASE_URL` | All | App Setting |
+| `IRU_ELEVATION_TAG_5MIN` | v1.1.0+ | App Setting |
+| `IRU_ELEVATION_TAG_10MIN` | v1.1.0+ | App Setting |
+| `IRU_ELEVATION_TAG_15MIN` | v1.1.0+ | App Setting |
+| `IRU_ELEVATION_TAG_30MIN` | v1.1.0+ | App Setting |
+| `IRU_LOG_COLLECTION_TAG` | v1.1.0+ | App Setting |
+| `EMAIL_DOMAIN` | All | App Setting |
+
+> **v1.2.0 AWS-only variables** (`DASHBOARD_API_KEY`, `BEDROCK_MODEL_ID`, `RISK_SCORES_TABLE_NAME`, `DASHBOARD_TOKENS_TABLE_NAME`) have no Azure equivalent in this guide.
 
 ---
 

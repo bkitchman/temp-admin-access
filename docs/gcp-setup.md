@@ -1,5 +1,9 @@
 # GCP Setup Guide
 
+> **Version note:** This guide covers adapting the **v1.1.0 (stable)** feature set to GCP. The core workflow (request → Slack approval → Iru tag → elevation → log collection) maps cleanly to GCP services.
+>
+> **v1.2.0 features that are AWS-specific:** The AI risk dashboard (S3/CloudFront), Amazon Bedrock risk scoring, and dashboard session tokens have no direct GCP equivalents and are not covered here. If you need these features, use the AWS deployment.
+
 This guide covers adapting the backend to run on Google Cloud Platform. The Iru scripts and Slack app configuration are **identical** to the AWS setup — only the backend infrastructure changes.
 
 ---
@@ -220,15 +224,20 @@ In the three device shell scripts, update the hardcoded API endpoint URLs to you
 
 All Lambda environment variables have direct GCP equivalents. Set them via `--set-env-vars` (non-secret) and `--set-secrets` (secret values from Secret Manager):
 
-| Variable | Source |
-|---|---|
-| `SLACK_BOT_TOKEN` | Secret Manager |
-| `SLACK_SIGNING_SECRET` | Secret Manager |
-| `IRU_API_TOKEN` | Secret Manager |
-| `SELF_SERVICE_API_KEY` | Secret Manager |
-| `SLACK_IT_CHANNEL_ID` | Environment variable |
-| `IRU_BASE_URL` | Environment variable |
-| `IRU_ELEVATION_TAG` | Environment variable |
-| `IRU_LOG_COLLECTION_TAG` | Environment variable |
-| `EMAIL_DOMAIN` | Environment variable |
-| `FIRESTORE_COLLECTION` | Environment variable (replaces `DYNAMODB_TABLE_NAME`) |
+| Variable | Version | Source |
+|---|---|---|
+| `SLACK_BOT_TOKEN` | All | Secret Manager |
+| `SLACK_SIGNING_SECRET` | All | Secret Manager |
+| `IRU_API_TOKEN` | All | Secret Manager |
+| `SELF_SERVICE_API_KEY` | All | Secret Manager |
+| `SLACK_IT_CHANNEL_ID` | All | Environment variable |
+| `IRU_BASE_URL` | All | Environment variable |
+| `IRU_ELEVATION_TAG_5MIN` | v1.1.0+ | Environment variable |
+| `IRU_ELEVATION_TAG_10MIN` | v1.1.0+ | Environment variable |
+| `IRU_ELEVATION_TAG_15MIN` | v1.1.0+ | Environment variable |
+| `IRU_ELEVATION_TAG_30MIN` | v1.1.0+ | Environment variable |
+| `IRU_LOG_COLLECTION_TAG` | v1.1.0+ | Environment variable |
+| `EMAIL_DOMAIN` | All | Environment variable |
+| `FIRESTORE_COLLECTION` | All | Environment variable (replaces `DYNAMODB_TABLE_NAME`) |
+
+> **v1.2.0 AWS-only variables** (`DASHBOARD_API_KEY`, `BEDROCK_MODEL_ID`, `RISK_SCORES_TABLE_NAME`, `DASHBOARD_TOKENS_TABLE_NAME`) have no GCP equivalent in this guide.
