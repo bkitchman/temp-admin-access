@@ -17,6 +17,21 @@ META_DIR="/var/root/.iru-elevation"
 META_FILE="$META_DIR/meta.json"
 PRIVILEGES_CLI="/Applications/Privileges.app/Contents/MacOS/PrivilegesCLI"
 
+# ---------------------------------------------------------------------------
+# Clean up any stale network monitor daemon from a previous session BEFORE
+# granting admin. If a previous session ended with network loss, the old
+# daemon's enforcement loop is still running and will immediately re-revoke
+# the new elevation the moment admin is granted.
+# ---------------------------------------------------------------------------
+NETWORK_PLIST="/Library/LaunchDaemons/com.kitchman.admin-network-monitor.plist"
+if [ -f "$NETWORK_PLIST" ]; then
+  echo "elevation-start: unloading stale network monitor from previous session"
+  launchctl unload "$NETWORK_PLIST" 2>/dev/null || true
+  rm -f "$NETWORK_PLIST"
+  echo "elevation-start: stale network monitor removed"
+fi
+rm -f "/var/tmp/iru-revoke-network-pending"
+
 if [ ! -f "$META_FILE" ]; then
   echo "elevation-start: metadata file not found, cannot record start time" >&2
   exit 1
@@ -619,8 +634,6 @@ cat > "$PLIST_PATH" << PLIST_EOF
 PLIST_EOF
 
 chmod 644 "$PLIST_PATH"
-# Clear any stale revoke-pending flag from a previous session before loading the daemon
-rm -f "/var/tmp/iru-revoke-network-pending"
 # Load the LaunchDaemon
 launchctl load "$PLIST_PATH"
 echo "elevation-start: network monitor LaunchDaemon installed and loaded"
