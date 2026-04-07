@@ -669,12 +669,65 @@ HTTP_STATUS=$(curl -s -o "$ELEVATION_RESPONSE_FILE" -w "%{http_code}" \
       <li><strong>Degraded log warning:</strong> If timezone conversion fails during log collection, a visible warning is prepended to the uploaded log.</li>
     </ul>
 
+    <!-- VERSION HISTORY -->
+    <h2 id="version-history">Version History</h2>
+    <p class="fade-in">Each release is tagged on GitHub — download any version as a zip or clone the tag directly.</p>
+
+    <div class="fade-in" style="display:flex;flex-direction:column;gap:16px;margin:24px 0">
+
+      <div style="border:1px solid var(--border);border-radius:10px;padding:20px 24px;background:var(--surface)">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+          <a href="https://github.com/bkitchman/temp-admin-access/releases/tag/v1.2.0" style="font-size:15px;font-weight:700;color:var(--accent);text-decoration:none">v1.2.0</a>
+          <span style="font-size:12px;color:var(--text-muted);background:var(--bg);border:1px solid var(--border);border-radius:20px;padding:2px 10px">Latest</span>
+        </div>
+        <p style="margin-bottom:10px;color:var(--text-muted);font-size:13px">AI Risk Dashboard · Sudo Log Storage · Security Hardening</p>
+        <ul style="margin:0;padding-left:20px;font-size:13px;line-height:1.7">
+          <li><strong>IT risk dashboard</strong> hosted on S3 + CloudFront — per-user request history, AI risk scores (Low/Medium/High/Critical), expandable sudo logs</li>
+          <li><strong>Single-use Slack links</strong> — every approval message includes a one-click dashboard link with a UUID session token; no API key entry required</li>
+          <li><strong>AI-powered risk scoring</strong> — Amazon Bedrock (Claude Haiku) evaluates actual sudo commands, not just request metadata; re-scored after each session log arrives</li>
+          <li><strong>Sudo log stored in DynamoDB</strong> — viewable inline in the dashboard; normalized to <code>HH:MM:SS  &lt;command&gt;</code> with PrivilegesCLI revocation entries stripped</li>
+          <li><strong>Security fixes</strong> — 14 issues resolved across two full audits: race condition in schedule creation, Bedrock IAM scope, CORS wildcard, XSS escaping, token session window, HTTPS enforcement, and more</li>
+        </ul>
+        <a href="https://github.com/bkitchman/temp-admin-access/releases/tag/v1.2.0" style="display:inline-block;margin-top:12px;font-size:12px;color:var(--accent)">Release notes &amp; upgrade guide →</a>
+      </div>
+
+      <div style="border:1px solid var(--border);border-radius:10px;padding:20px 24px;background:var(--surface)">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+          <a href="https://github.com/bkitchman/temp-admin-access/releases/tag/v1.1.0" style="font-size:15px;font-weight:700;color:var(--accent);text-decoration:none">v1.1.0</a>
+        </div>
+        <p style="margin-bottom:10px;color:var(--text-muted);font-size:13px">Network Enforcement · AppKit Form · Duration Selection</p>
+        <ul style="margin:0;padding-left:20px;font-size:13px;line-height:1.7">
+          <li><strong>Network enforcement</strong> — LaunchDaemon revokes admin if device goes offline during elevation; offline enforcement loop blocks re-elevation until backend is notified</li>
+          <li><strong>Native AppKit request form</strong> — replaces AppleScript dialog; single-screen window with duration picker and reason category selector</li>
+          <li><strong>Duration &amp; category selection</strong> — users choose 5/10/15/30 min; IT can override at approval time; reason categories drive trend analysis</li>
+          <li><strong>Off-hours auto-approval</strong> — configurable on-call Slack user ID for automatic approval outside business hours</li>
+          <li><strong>IT device lock</strong> — MDM-lock button in Slack thread for emergency response during active sessions</li>
+        </ul>
+        <a href="https://github.com/bkitchman/temp-admin-access/releases/tag/v1.1.0" style="display:inline-block;margin-top:12px;font-size:12px;color:var(--accent)">Release notes →</a>
+      </div>
+
+      <div style="border:1px solid var(--border);border-radius:10px;padding:20px 24px;background:var(--surface)">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+          <a href="https://github.com/bkitchman/temp-admin-access/releases/tag/v1.0.0" style="font-size:15px;font-weight:700;color:var(--accent);text-decoration:none">v1.0.0</a>
+        </div>
+        <p style="margin-bottom:10px;color:var(--text-muted);font-size:13px">Initial Release</p>
+        <ul style="margin:0;padding-left:20px;font-size:13px;line-height:1.7">
+          <li>Self Service Slack-approval workflow for temporary local admin elevation</li>
+          <li>Interactive Approve/Deny buttons, EventBridge-scheduled expiration, 5-minute warning</li>
+          <li>Sudo log collection via macOS unified log, uploaded to Slack thread on session end</li>
+          <li>API key in System Keychain, serial number binding, DynamoDB request tracking</li>
+        </ul>
+        <a href="https://github.com/bkitchman/temp-admin-access/releases/tag/v1.0.0" style="display:inline-block;margin-top:12px;font-size:12px;color:var(--accent)">Release notes →</a>
+      </div>
+
+    </div>
+
     <!-- WHAT'S NEXT -->
     <h2 id="whats-next">What's Next</h2>
     <ul class="fade-in">
       <li><strong>Extended audit retention:</strong> Export DynamoDB records to S3 before TTL expiration for long-term compliance storage.</li>
-      <li><strong>Trend dashboard:</strong> Surface reason categories and per-team request frequency in a read-only view for IT leadership.</li>
       <li><strong>Rotation-aware off-hours:</strong> Pull the on-call rotation from PagerDuty rather than a static Slack user ID.</li>
+      <li><strong>Dashboard pagination:</strong> Cursor-based paging for large request histories instead of full table scans.</li>
     </ul>
 
     <div class="callout info fade-in">
@@ -701,6 +754,7 @@ HTTP_STATUS=$(curl -s -o "$ELEVATION_RESPONSE_FILE" -w "%{http_code}" \
       <a href="#lessons">Lessons Learned</a>
       <a href="#stats">By the Numbers</a>
       <a href="#recently-shipped">Recently Shipped</a>
+      <a href="#version-history">Version History</a>
       <a href="#whats-next">What's Next</a>
     </nav>
   </aside>
