@@ -32,7 +32,6 @@ Globals:
         IRU_ELEVATION_TAG: !Ref IruElevationTag
         IRU_LOG_COLLECTION_TAG: !Ref IruLogCollectionTag
         DYNAMODB_TABLE_NAME: !Ref RequestsTable
-        RISK_SCORES_TABLE_NAME: !Ref RiskScoresTable
         SELF_SERVICE_API_KEY: !Ref SelfServiceApiKey
         EMAIL_DOMAIN: !Ref EmailDomain
         # EVENTBRIDGE_ROLE_ARN is set per-function below to avoid circular dependency
@@ -109,14 +108,20 @@ Parameters:
     Type: String
     Default: '13'
     Description: Business hours start in UTC (0-23), e.g. 13 = 9am ET. Requests outside this window are auto-approved when an on-call admin is set.
+    AllowedValues: ['0','1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16','17','18','19','20','21','22','23']
   BusinessHoursUtcEnd:
     Type: String
     Default: '23'
     Description: Business hours end in UTC (0-23), e.g. 23 = 7pm ET.
+    AllowedValues: ['0','1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16','17','18','19','20','21','22','23']
   DashboardApiKey:
     Type: String
     NoEcho: true
     Description: API key for the IT admin risk dashboard (separate from SELF_SERVICE_API_KEY)
+  DashboardUrl:
+    Type: String
+    Default: ''
+    Description: CloudFront URL of the dashboard (leave blank on first deploy; set after stack creates the distribution)
   BedrockModelId:
     Type: String
     Default: 'anthropic.claude-3-5-haiku-20241022-v1:0'
@@ -172,6 +177,27 @@ Resources:
         SSEType: KMS
 
   # -------------------------------------------------------------------------
+  # DynamoDB — single-use dashboard access tokens (7-day TTL)
+  # -------------------------------------------------------------------------
+  DashboardTokensTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: admin-access-dashboard-tokens
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: token
+          AttributeType: S
+      KeySchema:
+        - AttributeName: token
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+
+  # -------------------------------------------------------------------------
   # S3 bucket — private storage for the dashboard static files
   # -------------------------------------------------------------------------
   DashboardBucket:
@@ -186,7 +212,6 @@ Resources:
 
   DashboardBucketPolicy:
     Type: AWS::S3::BucketPolicy
-    DependsOn: DashboardDistribution
     Properties:
       Bucket: !Ref DashboardBucket
       PolicyDocument:
@@ -196,9 +221,6 @@ Resources:
               Service: cloudfront.amazonaws.com
             Action: s3:GetObject
             Resource: !Sub '${DashboardBucket.Arn}/*'
-            Condition:
-              StringEquals:
-                'AWS:SourceArn': !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${DashboardDistribution}'
 
   # -------------------------------------------------------------------------
   # CloudFront Origin Access Control — allows CloudFront to read the S3 bucket
@@ -277,11 +299,13 @@ Resources:
         Variables:
           PROCESS_SLACK_ACTION_FUNCTION_ARN: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:admin-access-processSlackAction'
           COMPUTE_RISK_SCORE_FUNCTION_ARN: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:admin-access-computeRiskScore'
+          RISK_SCORES_TABLE_NAME: admin-access-risk-scores
           ON_CALL_SLACK_USER_ID: !Ref OnCallSlackUserId
           ON_CALL_SLACK_USERNAME: !Ref OnCallSlackUsername
           BUSINESS_HOURS_UTC_START: !Ref BusinessHoursUtcStart
           BUSINESS_HOURS_UTC_END: !Ref BusinessHoursUtcEnd
-          DASHBOARD_URL: !Sub 'https://${DashboardDistribution.DomainName}'
+          DASHBOARD_URL: !Ref DashboardUrl
+          DASHBOARD_TOKENS_TABLE_NAME: admin-access-dashboard-tokens
       Events:
         Api:
           Type: Api
@@ -292,7 +316,9 @@ Resources:
         - DynamoDBCrudPolicy:
             TableName: !Ref RequestsTable
         - DynamoDBReadPolicy:
-            TableName: !Ref RiskScoresTable
+            TableName: admin-access-risk-scores
+        - DynamoDBCrudPolicy:
+            TableName: admin-access-dashboard-tokens
         - Statement:
             - Effect: Allow
               Action: lambda:InvokeFunction
@@ -528,6 +554,9 @@ Resources:
       FunctionName: admin-access-receiveLog
       Handler: receiveLog/index.handler
       Description: Receives sudo log from device and uploads it to the Slack thread
+      Environment:
+        Variables:
+          COMPUTE_RISK_SCORE_FUNCTION_ARN: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:admin-access-computeRiskScore'
       Events:
         Api:
           Type: Api
@@ -535,8 +564,12 @@ Resources:
             Path: /log
             Method: post
       Policies:
-        - DynamoDBReadPolicy:
+        - DynamoDBCrudPolicy:
             TableName: !Ref RequestsTable
+        - Statement:
+            - Effect: Allow
+              Action: lambda:InvokeFunction
+              Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:admin-access-computeRiskScore'
 
   # -------------------------------------------------------------------------
   # Lambda: computeRiskScore  (async, invoked by handleRequest)
@@ -561,7 +594,7 @@ Resources:
             - Effect: Allow
               Action:
                 - bedrock:InvokeModel
-              Resource: !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/*'
+              Resource: !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/${BedrockModelId}'
 
   # -------------------------------------------------------------------------
   # Lambda: getRiskDashboard  GET /dashboard
@@ -577,6 +610,8 @@ Resources:
         Variables:
           DASHBOARD_API_KEY: !Ref DashboardApiKey
           DASHBOARD_CORS_ORIGIN: !Sub 'https://${DashboardDistribution.DomainName}'
+          DASHBOARD_TOKENS_TABLE_NAME: admin-access-dashboard-tokens
+          RISK_SCORES_TABLE_NAME: admin-access-risk-scores
       Events:
         Api:
           Type: Api
@@ -588,6 +623,8 @@ Resources:
             TableName: !Ref RequestsTable
         - DynamoDBReadPolicy:
             TableName: !Ref RiskScoresTable
+        - DynamoDBCrudPolicy:
+            TableName: admin-access-dashboard-tokens
 
 # ---------------------------------------------------------------------------
 # Outputs

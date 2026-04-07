@@ -71,6 +71,11 @@ if [ -n "$ON_CALL_SLACK_USER_ID" ]; then
   PARAMS+=("OnCallSlackUserId=$ON_CALL_SLACK_USER_ID")
 fi
 
+# Pass the dashboard URL if already known (set after the first deploy)
+if [ -n "${DASHBOARD_URL:-}" ]; then
+  PARAMS+=("DashboardUrl=$DASHBOARD_URL")
+fi
+
 # ---------------------------------------------------------------------------
 # Clean, build, deploy
 # ---------------------------------------------------------------------------
@@ -84,7 +89,7 @@ echo "==> Building..."
 sam build
 
 echo "==> Deploying with parameters from environment..."
-STACK_NAME="${STACK_NAME:-admin-access}"
+STACK_NAME="${STACK_NAME:-temp-admin-access}"
 
 if [ "${1:-}" = "--confirm" ]; then
   sam deploy --stack-name "$STACK_NAME" --parameter-overrides "${PARAMS[@]}"
@@ -108,10 +113,30 @@ DASHBOARD_URL=$(aws cloudformation describe-stacks \
 
 if [ -n "$DASHBOARD_BUCKET" ]; then
   echo "==> Uploading dashboard to s3://${DASHBOARD_BUCKET}..."
-  aws s3 cp ../dashboard/index.html "s3://${DASHBOARD_BUCKET}/index.html" \
+
+  # Bake the API endpoint URL into the HTML so the browser doesn't need to prompt for it.
+  # The API key is never embedded — authentication uses single-use tokens from Slack links.
+  DASHBOARD_API_ENDPOINT=$(aws cloudformation describe-stacks \
+    --stack-name "$STACK_NAME" \
+    --query "Stacks[0].Outputs[?OutputKey=='DashboardEndpoint'].OutputValue" \
+    --output text 2>/dev/null || true)
+
+  DASHBOARD_HTML_TMP=$(mktemp /tmp/dashboard-XXXXXX.html)
+  sed "s|__EMBEDDED_API_URL__|${DASHBOARD_API_ENDPOINT}|g" ../dashboard/index.html > "$DASHBOARD_HTML_TMP"
+
+  aws s3 cp "$DASHBOARD_HTML_TMP" "s3://${DASHBOARD_BUCKET}/index.html" \
     --content-type "text/html" \
     --cache-control "no-cache, no-store, must-revalidate"
+  rm -f "$DASHBOARD_HTML_TMP"
   echo "==> Dashboard deployed: ${DASHBOARD_URL}"
+  if [ -z "${DASHBOARD_URL:-}" ]; then
+    echo ""
+    echo "==> First deploy detected. To enable the dashboard link in Slack approval messages,"
+    echo "    add this to your .zshrc and re-run ./deploy.sh:"
+    echo ""
+    echo "    export DASHBOARD_URL=${DASHBOARD_URL}"
+    echo ""
+  fi
 else
   echo "WARNING: Could not determine dashboard bucket name — skipping dashboard upload"
 fi

@@ -67,7 +67,30 @@ exports.handler = async (event) => {
     const expirationTime = new Date(now.getTime() + approvedDuration * 60 * 1000);
     const elevationEndTime = expirationTime.toISOString();
 
-    // 5. Create EventBridge schedules from actual elevation start time.
+    // 5. Atomically claim this request before creating schedules — prevents duplicate
+    //    schedules if two concurrent /start calls race past the elevationStartTime check.
+    //    N3-02: conditional write — attribute_not_exists guards the race.
+    try {
+      await dynamo.updateRequest(requestId, {
+        elevationStartTime,
+        elevationEndTime,
+        deviceConfirmedAt: elevationStartTime
+      }, {
+        expression: 'attribute_not_exists(#elevationStartTime)',
+        names: { '#elevationStartTime': 'elevationStartTime' },
+        values: {}
+      });
+    } catch (err) {
+      if (err.name === 'ConditionalCheckFailedException') {
+        console.warn(`handleElevationStart: timer already set for ${requestId} (race condition), returning existing end time`);
+        const existing = await dynamo.getRequest(requestId);
+        return respond(200, { message: 'Already started', elevationEnd: existing?.elevationEndTime });
+      }
+      throw err;
+    }
+
+    // 6. Create EventBridge schedules — only after DynamoDB write succeeds, so
+    //    duplicate schedule creation from concurrent calls is impossible.
     // Skip the warning schedule for 5-minute sessions — a T+0 warning is not meaningful.
     let warningSchedulerArn = null;
     if (approvedDuration > 5) {
@@ -86,29 +109,8 @@ exports.handler = async (event) => {
       payload: { requestId, elevationStartTime, elevationEndTime, approvedDuration }
     });
 
-    // 6. Update DynamoDB with actual times and scheduler ARNs.
-    //    N3-02: conditional write — attribute_not_exists guards against a race where two
-    //    concurrent invocations both pass the elevationStartTime check above.
-    try {
-      await dynamo.updateRequest(requestId, {
-        elevationStartTime,
-        elevationEndTime,
-        warningSchedulerArn,
-        expirationSchedulerArn,
-        deviceConfirmedAt: elevationStartTime
-      }, {
-        expression: 'attribute_not_exists(#elevationStartTime)',
-        names: { '#elevationStartTime': 'elevationStartTime' },
-        values: {}
-      });
-    } catch (err) {
-      if (err.name === 'ConditionalCheckFailedException') {
-        console.warn(`handleElevationStart: timer already set for ${requestId} (race condition), returning existing end time`);
-        const existing = await dynamo.getRequest(requestId);
-        return respond(200, { message: 'Already started', elevationEnd: existing?.elevationEndTime });
-      }
-      throw err;
-    }
+    // 6b. Persist scheduler ARNs now that we have them (non-critical — used only for cleanup)
+    await dynamo.updateRequest(requestId, { warningSchedulerArn, expirationSchedulerArn });
 
     // 7. Post accurate expiry time and Revoke button to Slack thread
     await slack.postRevokeButton({

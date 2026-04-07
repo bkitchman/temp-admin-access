@@ -20,7 +20,13 @@ async function invokeClaudeJson(prompt, maxTokens = 1024) {
     body: JSON.stringify(body)
   });
 
-  const response = await client.send(command);
+  const BEDROCK_TIMEOUT_MS = 45000;
+  const response = await Promise.race([
+    client.send(command),
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Bedrock invocation timed out after 45s')), BEDROCK_TIMEOUT_MS)
+    )
+  ]);
   const responseText = new TextDecoder().decode(response.body);
   const parsed = JSON.parse(responseText);
   const text = parsed.content?.[0]?.text || '';

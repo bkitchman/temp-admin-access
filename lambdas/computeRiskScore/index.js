@@ -51,23 +51,25 @@ async function evaluateRisk(username, requests) {
   const days7 = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
   const days30 = new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString();
 
-  // Build a sanitized history summary for Claude (no raw sudo logs to limit tokens)
+  // Build a history summary for Claude including actual sudo commands
   const historySummary = requests
     .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
     .slice(0, 50) // cap at 50 most recent requests
-    .map(r => ({
-      date: r.createdAt,
-      status: r.status,
-      category: r.reasonCategory,
-      duration: r.requestedDuration,
-      approvedDuration: r.approvedDuration,
-      reason: (r.reason || '').slice(0, 200),
-      sudoCommandCount: countSudoCommands(r.logContent),
-      hasPrivilegeEscalation: detectPrivilegeEscalation(r.logContent),
-      revokedByNetworkLoss: r.revokedByNetworkLoss || false,
-      revokedEarly: r.revokedEarly || false,
-      denied: r.status === 'denied'
-    }));
+    .map(r => {
+      const commands = extractCommands(r.logContent);
+      return {
+        date: r.createdAt,
+        status: r.status,
+        category: r.reasonCategory,
+        duration: r.requestedDuration,
+        approvedDuration: r.approvedDuration,
+        reason: (r.reason || '').slice(0, 200),
+        sudoCommands: commands,           // actual commands run
+        revokedByNetworkLoss: r.revokedByNetworkLoss || false,
+        revokedEarly: r.revokedEarly || false,
+        denied: r.status === 'denied'
+      };
+    });
 
   const recent7 = requests.filter(r => (r.createdAt || '') >= days7).length;
   const recent30 = requests.filter(r => (r.createdAt || '') >= days30).length;
@@ -95,30 +97,43 @@ Total requests in history: ${history.length}
 Requests in last 7 days: ${recent7}
 Requests in last 30 days: ${recent30}
 
-Request history (most recent first):
+Request history (most recent first). The "sudoCommands" field lists the actual commands the user ran with sudo during each session:
 ${JSON.stringify(history, null, 2)}
 
 Based on this history, evaluate the security risk of granting this user another temporary admin session.
 
-Risk factors to consider:
-- High request frequency (3+ per week = elevated, 2+ per day = high)
-- Categories: "security" and "debug" carry higher inherent risk than "install" or "config"
-- Privilege escalation in sudo history (sudo bash, sudo su, sudo -s, sudoedit /etc/sudoers)
+Command-level risk factors (highest weight):
+- Shell escapes: sudo bash, sudo sh, sudo zsh, sudo -s — bypasses intended scope entirely
+- Privilege persistence: adding users to admin group, modifying /etc/sudoers or sudoers.d, writing launchd plists to /Library/LaunchDaemons
+- Credential access: reading Keychain files, shadow files, /etc/passwd
+- Network manipulation: changing DNS, disabling firewall (socketfilterfw), modifying /etc/hosts with non-standard entries
+- Data exfiltration risk: curl/wget posting to external hosts, scp/rsync to outside addresses
+- Security tool tampering: disabling SIP (csrutil), modifying MDM enrollment, touching /var/db/.AppleSetupDone
+
+Behavioral risk factors (medium weight):
 - Network-loss revocations may indicate evasion attempts
-- Requests consistently at maximum duration (30 min)
-- Vague or low-quality justifications
+- Sessions using less than 20% of approved time (possible log truncation)
+- Requests consistently at maximum duration (30 min) for minor tasks
+- Vague justifications inconsistent with commands actually run
+- High frequency (3+ per week = elevated, 2+ per day = high)
 - History of denied requests
-- Unusual timing patterns (e.g., repeated late-night/weekend requests)
+
+Low-risk indicators (reduce score):
+- Commands tightly match the stated reason
+- Standard package management: brew install/upgrade, pip install, npm install
+- Developer tooling: xcode-select, codesign, gem install
+- Routine config tasks: defaults write, chown on user-owned paths
 
 Respond ONLY with valid JSON — no markdown, no explanation, just the JSON object:
 {
   "score": <integer 0-100>,
   "level": "<low|medium|high|critical>",
-  "keyFactors": ["<factor 1>", "<factor 2>", "<factor 3>"],
-  "summary": "<1-2 sentence summary>"
+  "keyFactors": ["<specific finding 1>", "<specific finding 2>", "<specific finding 3>"],
+  "summary": "<1-2 sentence summary referencing specific commands if notable>"
 }
 
-Score guide: 0-30 = low, 31-60 = medium, 61-80 = high, 81-100 = critical.`;
+Score guide: 0-30 = low, 31-60 = medium, 61-80 = high, 81-100 = critical.
+When sudoCommands is empty for a session, that session's log has not yet been collected — do not penalise the user for missing data.`;
 }
 
 function scoreToLevel(score) {
@@ -128,21 +143,20 @@ function scoreToLevel(score) {
   return 'critical';
 }
 
-function countSudoCommands(logContent) {
-  if (!logContent) return 0;
-  const matches = logContent.match(/COMMAND=/g);
-  return matches ? matches.length : 0;
-}
-
-function detectPrivilegeEscalation(logContent) {
-  if (!logContent) return false;
-  const escalationPatterns = [
-    /COMMAND=.*\bsudo\s+-s\b/i,
-    /COMMAND=.*\bsudo\s+bash\b/i,
-    /COMMAND=.*\bsudo\s+su\b/i,
-    /COMMAND=.*\bsudoedit\s+\/etc\/sudoers/i,
-    /COMMAND=.*\bchmod\s+[0-9]*\s+\/etc\/sudoers/i,
-    /COMMAND=.*\bvisudo\b/i
-  ];
-  return escalationPatterns.some(p => p.test(logContent));
+// Extract the command strings from sudo log lines.
+// Log format: "... COMMAND=/usr/bin/git status" or "... COMMAND=/bin/bash -c '...'"
+// Returns an array of up to 100 command strings (capped to limit prompt size).
+function extractCommands(logContent) {
+  if (!logContent) return [];
+  const commands = [];
+  for (const line of logContent.split('\n')) {
+    const match = line.match(/COMMAND=(.+)$/);
+    if (match) {
+      // Strip full path prefix from the binary for readability, keep args
+      const cmd = match[1].trim();
+      commands.push(cmd);
+      if (commands.length >= 100) break;
+    }
+  }
+  return commands;
 }

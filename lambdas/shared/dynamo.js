@@ -5,6 +5,7 @@ const client = new DynamoDBClient({});
 const ddb = DynamoDBDocumentClient.from(client);
 const TABLE = process.env.DYNAMODB_TABLE_NAME;
 const RISK_TABLE = process.env.RISK_SCORES_TABLE_NAME;
+const TOKENS_TABLE = process.env.DASHBOARD_TOKENS_TABLE_NAME;
 
 // Write a new request item
 async function putRequest(item) {
@@ -109,7 +110,32 @@ async function scanAllRequests() {
   return result.Items || [];
 }
 
+// ----- Dashboard single-use tokens table -----
+
+async function putDashboardToken(item) {
+  await ddb.send(new PutCommand({ TableName: TOKENS_TABLE, Item: item }));
+}
+
+async function getDashboardToken(token) {
+  const result = await ddb.send(new GetCommand({
+    TableName: TOKENS_TABLE,
+    Key: { token }
+  }));
+  return result.Item || null;
+}
+
+// Record the first-used timestamp. Idempotent — only sets firstUsedAt once.
+async function markDashboardTokenFirstUsed(token) {
+  await ddb.send(new UpdateCommand({
+    TableName: TOKENS_TABLE,
+    Key: { token },
+    UpdateExpression: 'SET firstUsedAt = if_not_exists(firstUsedAt, :now)',
+    ExpressionAttributeValues: { ':now': Date.now() }
+  }));
+}
+
 module.exports = {
   putRequest, getRequest, updateRequest, scanActiveRequests,
-  scanRequestsByUser, putRiskScore, getRiskScore, scanAllRiskScores, scanAllRequests
+  scanRequestsByUser, putRiskScore, getRiskScore, scanAllRiskScores, scanAllRequests,
+  putDashboardToken, getDashboardToken, markDashboardTokenFirstUsed
 };

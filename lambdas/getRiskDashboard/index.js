@@ -1,12 +1,25 @@
 // GET /dashboard — returns admin access history and AI risk scores for the dashboard UI.
-// Protected by DASHBOARD_API_KEY (separate from the device-facing SELF_SERVICE_API_KEY).
+// Auth: either x-api-key header (admin direct access) or ?token=<uuid> (single-use Slack link).
 // Optional query param: ?user=username to scope to a single user's history.
 const dynamo = require('../shared/dynamo');
 
 exports.handler = async (event) => {
   try {
     const apiKey = event.headers?.['x-api-key'] ?? event.headers?.['X-Api-Key'];
-    if (!apiKey || apiKey !== process.env.DASHBOARD_API_KEY) {
+    const token = event.queryStringParameters?.token || null;
+
+    if (apiKey && apiKey === process.env.DASHBOARD_API_KEY) {
+      // Admin direct access — no token check needed
+    } else if (token) {
+      // Slack link token — valid for 4 hours after first use, 7 days if never used
+      const tokenRecord = await dynamo.getDashboardToken(token);
+      if (!tokenRecord) return respond(401, { error: 'Invalid or expired link.' });
+      const SESSION_WINDOW_MS = 30 * 60 * 1000; // 30 minutes
+      if (tokenRecord.firstUsedAt && (Date.now() - tokenRecord.firstUsedAt) > SESSION_WINDOW_MS) {
+        return respond(403, { error: 'This link has expired. Request a new approval to get a fresh link.' });
+      }
+      await dynamo.markDashboardTokenFirstUsed(token);
+    } else {
       return respond(401, { error: 'Unauthorized' });
     }
 
@@ -84,7 +97,7 @@ exports.handler = async (event) => {
   }
 };
 
-// Strip fields that should not leave the API (raw sudo log content, Slack IDs)
+// Strip Slack-internal fields but include log content for dashboard display
 function sanitizeRequest(r) {
   return {
     requestId: r.requestId,
@@ -100,7 +113,8 @@ function sanitizeRequest(r) {
     expiredAt: r.expiredAt,
     revokedEarly: r.revokedEarly || false,
     revokedByNetworkLoss: r.revokedByNetworkLoss || false,
-    lockedByIT: r.lockedByIT || false
+    lockedByIT: r.lockedByIT || false,
+    logContent: r.logContent || null
   };
 }
 
@@ -109,8 +123,10 @@ function respond(statusCode, body) {
     statusCode,
     headers: {
       'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': process.env.DASHBOARD_CORS_ORIGIN || '*',
-      'Access-Control-Allow-Headers': 'x-api-key,content-type'
+      ...(process.env.DASHBOARD_CORS_ORIGIN ? {
+        'Access-Control-Allow-Origin': process.env.DASHBOARD_CORS_ORIGIN,
+        'Access-Control-Allow-Headers': 'x-api-key,content-type'
+      } : {})
     },
     body: JSON.stringify(body)
   };

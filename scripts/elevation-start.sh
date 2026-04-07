@@ -520,6 +520,8 @@ while true; do
   IS_ADMIN=\$(dseditgroup -o checkmember -m "\$CURRENT_USER" admin 2>/dev/null | grep -c "yes")
   if [ "\$IS_ADMIN" -eq 0 ]; then
     echo "\$(ts) \$LOG_TAG: \$CURRENT_USER is no longer admin — cleaning up"
+    echo "\$(ts) \$LOG_TAG: admin group members at exit: \$(dscl . -read /Groups/admin GroupMembership 2>/dev/null | head -1)"
+    echo "\$(ts) \$LOG_TAG: processes that may have revoked: \$(pgrep -fl 'PrivilegesCLI\|collect-sudo\|kandji' 2>/dev/null | head -5 || echo 'none')"
     cleanup_daemon
     exit 0
   fi

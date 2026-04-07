@@ -131,9 +131,24 @@ exports.handler = async (event) => {
       console.warn(`handleRequest: could not fetch risk score for "${username}":`, err.message);
     }
 
-    const dashboardUrl = process.env.DASHBOARD_URL
-      ? `${process.env.DASHBOARD_URL}?user=${encodeURIComponent(username)}`
-      : null;
+    // 5c. Generate a single-use dashboard token for this request's Slack link
+    let dashboardUrl = null;
+    if (process.env.DASHBOARD_URL) {
+      const dashboardToken = uuidv4();
+      const tokenTtl = Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60; // 7 days
+      try {
+        await dynamo.putDashboardToken({
+          token: dashboardToken,
+          requestId,
+          username,
+          createdAt: new Date().toISOString(),
+          ttl: tokenTtl
+        });
+        dashboardUrl = `${process.env.DASHBOARD_URL}?user=${encodeURIComponent(username)}&token=${dashboardToken}`;
+      } catch (err) {
+        console.warn(`handleRequest: could not store dashboard token for "${username}":`, err.message);
+      }
+    }
 
     // 6. Post interactive approval message to the IT Slack channel
     const { channel: slackChannelId, ts: slackThreadTs } = await slack.postApprovalMessage({

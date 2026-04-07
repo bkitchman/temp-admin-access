@@ -51,17 +51,8 @@ async function iruRequest(method, path, body, attempt = 1) {
   const response = await fetch(url, options);
 
   if (!response.ok) {
-    // N6-12: log only the status code for 5xx — response body may contain device details.
-    // N8-15: for 4xx errors, log the first 200 chars of the body — PII unlikely in error
-    // responses, and the detail (e.g. "device not found" vs "rate limit") aids debugging.
-    let errDetail = '';
-    if (response.status >= 400 && response.status < 500) {
-      try {
-        const errText = await response.text();
-        errDetail = ` — ${errText.slice(0, 200)}`;
-      } catch { /* ignore read errors */ }
-    }
-    console.error(`Iru ${method} ${path} failed: HTTP ${response.status}${errDetail}`);
+    // Log only the status code — response bodies may contain device details or user PII.
+    console.error(`Iru ${method} ${path} failed: HTTP ${response.status}`);
     // N7-10: retry on transient 5xx/429 — do not retry 4xx (auth/not-found errors)
     if (attempt < 3 && (response.status >= 500 || response.status === 429)) {
       const backoffMs = attempt === 1 ? 1000 : 10000;

@@ -136,11 +136,14 @@ fi
 
 echo "$(ts) collect-sudo-log: querying unified log from $LOCAL_START to $LOCAL_END"
 
-UNIFIED_RAW=$(log show \
-  --predicate 'process == "sudo" AND message CONTAINS "COMMAND="' \
-  --info \
+# Use --debug to capture sudo messages at all log levels (macOS sudo logs at the
+# default/notice level; --info alone misses these on some macOS versions).
+# Secondary grep filters to COMMAND= lines only after extracting all sudo activity.
+UNIFIED_RAW=$(timeout 30 log show \
+  --predicate 'process == "sudo"' \
+  --debug \
   --start "$LOCAL_START" \
-  --end "$LOCAL_END" 2>/dev/null | grep -v "^Filtering" | grep -v "^$" | grep -v "^---" | grep "COMMAND=")
+  --end "$LOCAL_END" 2>/dev/null | grep "COMMAND=")
 
 if [ -n "$UNIFIED_RAW" ]; then
   UNIFIED_LOG_CONTENT="$UNIFIED_RAW"
@@ -149,7 +152,8 @@ else
   echo "$(ts) collect-sudo-log: no entries in unified log matching COMMAND= for this window"
 fi
 
-# Merge both sources, deduplicate
+# Merge both sources, deduplicate, and strip internal revocation commands
+# (PrivilegesCLI --remove is called by the system to revoke access — not a user action)
 if [ -n "$FILE_LOG_CONTENT" ] && [ -n "$UNIFIED_LOG_CONTENT" ]; then
   LOG_CONTENT=$(printf '%s\n%s' "$FILE_LOG_CONTENT" "$UNIFIED_LOG_CONTENT" | sort -u)
 elif [ -n "$FILE_LOG_CONTENT" ]; then
@@ -158,6 +162,11 @@ elif [ -n "$UNIFIED_LOG_CONTENT" ]; then
   LOG_CONTENT="$UNIFIED_LOG_CONTENT"
 else
   LOG_CONTENT=""
+fi
+
+# Strip PrivilegesCLI --remove entries — these are system-generated revocations, not user commands
+if [ -n "$LOG_CONTENT" ]; then
+  LOG_CONTENT=$(echo "$LOG_CONTENT" | grep -v "PrivilegesCLI.*--remove")
 fi
 
 if [ -z "$LOG_CONTENT" ]; then

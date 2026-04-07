@@ -104,6 +104,9 @@
     .status-revoked_early { background: rgba(249,115,22,.12); color: var(--high); }
     .status-network_loss { background: rgba(251,191,36,.12); color: var(--medium); }
     .no-requests { color: var(--text-muted); font-size: 13px; padding: 14px 0; }
+    .log-toggle { background: none; border: none; color: var(--accent); font-size: 11px; cursor: pointer; padding: 0; text-decoration: underline; }
+    .sudo-log-row td { padding: 0 10px 10px; }
+    .sudo-log-pre { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; font-size: 11px; font-family: monospace; white-space: pre-wrap; word-break: break-all; color: var(--text-muted); max-height: 300px; overflow-y: auto; margin: 0; }
 
     /* Shared components */
     button.btn { padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer; font-size: 13px; font-weight: 500; transition: opacity .15s; }
@@ -180,6 +183,16 @@
 </div>
 
 <script>
+  // API endpoint URL baked in at deploy time by deploy.sh.
+  // If still a placeholder, the manual auth screen allows entry of both.
+  const _EMBEDDED_API_URL = '__EMBEDDED_API_URL__';
+  const _HAS_EMBEDDED_URL = !_EMBEDDED_API_URL.startsWith('__');
+
+  // Single-use token from the Slack link (?token=<uuid>).
+  // When present the dashboard authenticates via the token instead of an API key.
+  const _urlParams = new URLSearchParams(location.search);
+  const _TOKEN = _urlParams.get('token') || '';
+
   const SESSION_KEY = 'iru_dashboard_session';
   let allUsers = [];
   let currentFilter = 'all';
@@ -189,6 +202,7 @@
   // ─── Auth ───────────────────────────────────────────────────────────────────
 
   function getSession() {
+    if (_TOKEN && _HAS_EMBEDDED_URL) return { url: _EMBEDDED_API_URL, token: _TOKEN };
     try { return JSON.parse(sessionStorage.getItem(SESSION_KEY)); } catch { return null; }
   }
   function setSession(url, key) {
@@ -199,11 +213,12 @@
   }
 
   async function doLogin() {
-    const url = document.getElementById('api-url-input').value.trim().replace(/\/$/, '');
+    const url = (_HAS_EMBEDDED_URL ? _EMBEDDED_API_URL : document.getElementById('api-url-input').value.trim().replace(/\/$/, ''));
     const key = document.getElementById('api-key-input').value.trim();
     const errEl = document.getElementById('auth-error');
     errEl.style.display = 'none';
     if (!url || !key) { errEl.textContent = 'Both fields are required.'; errEl.style.display = 'block'; return; }
+    if (!url.startsWith('https://')) { errEl.textContent = 'API endpoint must use HTTPS.'; errEl.style.display = 'block'; return; }
     try {
       const res = await fetch(url, { headers: { 'x-api-key': key } });
       if (res.status === 401) throw new Error('Invalid API key.');
@@ -236,8 +251,11 @@
   async function apiFetch(path) {
     const session = getSession();
     if (!session) throw new Error('Not authenticated');
-    const url = path ? `${session.url}?${path}` : session.url;
-    const res = await fetch(url, { headers: { 'x-api-key': session.key } });
+    let qs = path || '';
+    if (session.token) qs = qs ? `${qs}&token=${session.token}` : `token=${session.token}`;
+    const url = qs ? `${session.url}?${qs}` : session.url;
+    const headers = session.key ? { 'x-api-key': session.key } : {};
+    const res = await fetch(url, { headers });
     if (res.status === 401) { doLogout(); throw new Error('Session expired — please sign in again.'); }
     if (!res.ok) throw new Error(`API error: ${res.status}`);
     return res.json();
@@ -430,20 +448,26 @@
     } else {
       html += `<table class="req-table">
         <thead><tr>
-          <th>Date</th><th>Device</th><th>Category</th><th>Duration</th><th>Reason</th><th>Status</th>
+          <th>Date</th><th>Device</th><th>Category</th><th>Duration</th><th>Reason</th><th>Status</th><th>Log</th>
         </tr></thead>
         <tbody>
         ${requests.map(r => {
           const statusClass = `status-${r.status.replace(/[^a-z_]/gi, '')}`;
           const statusLabel = statusLabel_fn(r);
+          const logId = `log-${esc(r.requestId)}`;
+          const hasLog = !!r.logContent;
+          const logRow = hasLog ? `<tr class="sudo-log-row" id="${logId}" style="display:none">
+            <td colspan="7"><pre class="sudo-log-pre">${esc(r.logContent)}</pre></td>
+          </tr>` : '';
           return `<tr>
             <td style="white-space:nowrap;color:var(--text-muted)">${formatDate(r.createdAt)}</td>
             <td>${esc(r.deviceHostname || r.deviceSerial || '—')}</td>
             <td>${esc(categoryLabel(r.reasonCategory))}</td>
             <td>${r.requestedDuration ? `${r.requestedDuration}m` : '—'}${r.approvedDuration && r.approvedDuration !== r.requestedDuration ? ` → ${r.approvedDuration}m` : ''}</td>
-            <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.reason || '')}">${esc((r.reason || '').slice(0, 80))}${r.reason?.length > 80 ? '…' : ''}</td>
+            <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.reason || '')}">${esc((r.reason || '').slice(0, 80))}${r.reason?.length > 80 ? '…' : ''}</td>
             <td><span class="status-pill ${statusClass}">${statusLabel}</span></td>
-          </tr>`;
+            <td>${hasLog ? `<button class="log-toggle" onclick="toggleLog('${esc(r.requestId)}')">View</button>` : '<span style="color:var(--text-muted);font-size:11px">—</span>'}</td>
+          </tr>${logRow}`;
         }).join('')}
         </tbody></table>`;
     }
@@ -452,6 +476,15 @@
   }
 
   // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+  function toggleLog(requestId) {
+    const row = document.getElementById(`log-${requestId}`);
+    if (!row) return;
+    const btn = row.previousElementSibling?.querySelector('.log-toggle');
+    const visible = row.style.display !== 'none';
+    row.style.display = visible ? 'none' : 'table-row';
+    if (btn) btn.textContent = visible ? 'View' : 'Hide';
+  }
 
   function riskBadge(level, score) {
     const labels = { low: '🟢 Low', medium: '🟡 Medium', high: '🟠 High', critical: '🔴 Critical', unknown: '⬜ Unscored' };
@@ -493,17 +526,31 @@
   }
 
   function esc(str) {
-    return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;').replace(/`/g,'&#x60;');
   }
 
   // ─── Init ─────────────────────────────────────────────────────────────────────
 
   (function init() {
+    // Token from Slack link: skip auth screen and go straight to dashboard
+    if (_TOKEN && _HAS_EMBEDDED_URL) {
+      const user = _urlParams.get('user');
+      if (user) window._targetUser = user;
+      showApp();
+      return;
+    }
+
     const session = getSession();
     if (session) {
       // Pre-fill the inputs in case session expires and user needs to re-auth
-      document.getElementById('api-url-input').value = session.url;
+      if (document.getElementById('api-url-input')) document.getElementById('api-url-input').value = session.url || '';
       showApp();
+    } else if (_HAS_EMBEDDED_URL) {
+      // URL is baked in but no token — hide the URL field, only ask for API key
+      const urlField = document.getElementById('api-url-input');
+      if (urlField) urlField.style.display = 'none';
+      const desc = document.querySelector('.auth-card p');
+      if (desc) desc.textContent = 'Enter your dashboard API key to continue.';
     }
 
     // Allow pressing Enter to log in
@@ -511,11 +558,9 @@
       if (e.key === 'Enter') doLogin();
     });
 
-    // Pre-fill URL from query param (e.g. when linked from Slack with ?user=jdoe)
-    const params = new URLSearchParams(window.location.search);
-    const user = params.get('user');
+    // Pre-fill user from query param (e.g. when linked from Slack with ?user=jdoe)
+    const user = _urlParams.get('user');
     if (user) {
-      // Will be used once the dashboard loads to auto-expand or filter this user
       window._targetUser = user;
       document.getElementById('search-input') && (document.getElementById('search-input').value = user);
     }
