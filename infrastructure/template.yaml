@@ -117,14 +117,6 @@ Parameters:
     Type: String
     NoEcho: true
     Description: API key for the IT admin risk dashboard (separate from SELF_SERVICE_API_KEY)
-  DashboardUrl:
-    Type: String
-    Default: ''
-    Description: Base URL of the hosted admin dashboard (e.g. https://yourorg.github.io/admin-dashboard). Included as a link in Slack approval messages.
-  DashboardCorsOrigin:
-    Type: String
-    Default: '*'
-    Description: CORS origin allowed for the dashboard API (e.g. https://yourorg.github.io)
   BedrockModelId:
     Type: String
     Default: 'anthropic.claude-3-5-haiku-20241022-v1:0'
@@ -180,6 +172,73 @@ Resources:
         SSEType: KMS
 
   # -------------------------------------------------------------------------
+  # S3 bucket — private storage for the dashboard static files
+  # -------------------------------------------------------------------------
+  DashboardBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'admin-access-dashboard-${AWS::AccountId}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  DashboardBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    DependsOn: DashboardDistribution
+    Properties:
+      Bucket: !Ref DashboardBucket
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub '${DashboardBucket.Arn}/*'
+            Condition:
+              StringEquals:
+                'AWS:SourceArn': !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${DashboardDistribution}'
+
+  # -------------------------------------------------------------------------
+  # CloudFront Origin Access Control — allows CloudFront to read the S3 bucket
+  # without making the bucket public
+  # -------------------------------------------------------------------------
+  DashboardOAC:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub 'admin-access-dashboard-oac-${AWS::StackName}'
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  # -------------------------------------------------------------------------
+  # CloudFront distribution — serves the dashboard over HTTPS
+  # -------------------------------------------------------------------------
+  DashboardDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Comment: Admin Access Risk Dashboard
+        DefaultRootObject: index.html
+        Enabled: true
+        HttpVersion: http2
+        PriceClass: PriceClass_100
+        DefaultCacheBehavior:
+          TargetOriginId: DashboardS3Origin
+          ViewerProtocolPolicy: redirect-to-https
+          # AWS managed cache policy: CachingDisabled — dashboard should always be current
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+          Compress: true
+        Origins:
+          - Id: DashboardS3Origin
+            DomainName: !GetAtt DashboardBucket.RegionalDomainName
+            S3OriginConfig:
+              OriginAccessIdentity: ''
+            OriginAccessControlId: !GetAtt DashboardOAC.Id
+
+  # -------------------------------------------------------------------------
   # IAM Role — EventBridge Scheduler → Lambda invocation
   # Defined first so Lambdas can reference its ARN without circular deps
   # -------------------------------------------------------------------------
@@ -222,7 +281,7 @@ Resources:
           ON_CALL_SLACK_USERNAME: !Ref OnCallSlackUsername
           BUSINESS_HOURS_UTC_START: !Ref BusinessHoursUtcStart
           BUSINESS_HOURS_UTC_END: !Ref BusinessHoursUtcEnd
-          DASHBOARD_URL: !Ref DashboardUrl
+          DASHBOARD_URL: !Sub 'https://${DashboardDistribution.DomainName}'
       Events:
         Api:
           Type: Api
@@ -517,7 +576,7 @@ Resources:
       Environment:
         Variables:
           DASHBOARD_API_KEY: !Ref DashboardApiKey
-          DASHBOARD_CORS_ORIGIN: !Ref DashboardCorsOrigin
+          DASHBOARD_CORS_ORIGIN: !Sub 'https://${DashboardDistribution.DomainName}'
       Events:
         Api:
           Type: Api
@@ -565,6 +624,14 @@ Outputs:
   RiskScoresTableName:
     Description: DynamoDB risk scores table name
     Value: !Ref RiskScoresTable
+
+  DashboardBucketName:
+    Description: S3 bucket that hosts the dashboard static files
+    Value: !Ref DashboardBucket
+
+  DashboardUrl:
+    Description: CloudFront URL for the IT admin risk dashboard
+    Value: !Sub 'https://${DashboardDistribution.DomainName}'
 
   DashboardEndpoint:
     Description: IT admin risk dashboard API endpoint

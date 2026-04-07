@@ -9,6 +9,7 @@
 #   SLACK_BOT_TOKEN        — Slack bot OAuth token
 #   SLACK_SIGNING_SECRET   — Slack app signing secret
 #   SELF_SERVICE_API_KEY   — Shared key stored in device keychain
+#   DASHBOARD_API_KEY      — API key for the IT admin risk dashboard
 #
 # Optional env vars (defaults match samconfig.toml):
 #   IRU_BASE_URL           — Iru tenant API base URL
@@ -28,7 +29,7 @@ cd "$(dirname "$0")"
 # Validate required env vars
 # ---------------------------------------------------------------------------
 MISSING=()
-for VAR in IRU_API_TOKEN SLACK_BOT_TOKEN SLACK_SIGNING_SECRET SELF_SERVICE_API_KEY; do
+for VAR in IRU_API_TOKEN SLACK_BOT_TOKEN SLACK_SIGNING_SECRET SELF_SERVICE_API_KEY DASHBOARD_API_KEY; do
   if [ -z "${!VAR:-}" ]; then
     MISSING+=("$VAR")
   fi
@@ -57,6 +58,7 @@ PARAMS=(
   "SlackSigningSecret=$SLACK_SIGNING_SECRET"
   "SlackItChannelId=$SLACK_IT_CHANNEL_ID"
   "SelfServiceApiKey=$SELF_SERVICE_API_KEY"
+  "DashboardApiKey=$DASHBOARD_API_KEY"
   "EmailDomain=$EMAIL_DOMAIN"
   "IruElevationTag5Min=temp-admin-elevation-5min"
   "IruElevationTag10Min=temp-admin-elevation-10min"
@@ -82,8 +84,34 @@ echo "==> Building..."
 sam build
 
 echo "==> Deploying with parameters from environment..."
+STACK_NAME="${STACK_NAME:-admin-access}"
+
 if [ "${1:-}" = "--confirm" ]; then
-  sam deploy --parameter-overrides "${PARAMS[@]}"
+  sam deploy --stack-name "$STACK_NAME" --parameter-overrides "${PARAMS[@]}"
 else
-  sam deploy --no-confirm-changeset --parameter-overrides "${PARAMS[@]}"
+  sam deploy --stack-name "$STACK_NAME" --no-confirm-changeset --parameter-overrides "${PARAMS[@]}"
+fi
+
+# ---------------------------------------------------------------------------
+# Upload dashboard to S3 (after stack is up so the bucket exists)
+# ---------------------------------------------------------------------------
+echo "==> Fetching stack outputs..."
+DASHBOARD_BUCKET=$(aws cloudformation describe-stacks \
+  --stack-name "$STACK_NAME" \
+  --query "Stacks[0].Outputs[?OutputKey=='DashboardBucketName'].OutputValue" \
+  --output text 2>/dev/null || true)
+
+DASHBOARD_URL=$(aws cloudformation describe-stacks \
+  --stack-name "$STACK_NAME" \
+  --query "Stacks[0].Outputs[?OutputKey=='DashboardUrl'].OutputValue" \
+  --output text 2>/dev/null || true)
+
+if [ -n "$DASHBOARD_BUCKET" ]; then
+  echo "==> Uploading dashboard to s3://${DASHBOARD_BUCKET}..."
+  aws s3 cp ../dashboard/index.html "s3://${DASHBOARD_BUCKET}/index.html" \
+    --content-type "text/html" \
+    --cache-control "no-cache, no-store, must-revalidate"
+  echo "==> Dashboard deployed: ${DASHBOARD_URL}"
+else
+  echo "WARNING: Could not determine dashboard bucket name — skipping dashboard upload"
 fi
