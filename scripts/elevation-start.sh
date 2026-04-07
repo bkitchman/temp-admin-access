@@ -71,8 +71,8 @@ fi
 WAIT=0
 while [ ! -f "$PRIVILEGES_CLI" ] && [ $WAIT -lt 60 ]; do
   echo "elevation-start: waiting for PrivilegesCLI... ($WAIT s)"
-  sleep 5
-  WAIT=$((WAIT + 5))
+  sleep 1
+  WAIT=$((WAIT + 1))
 done
 
 if [ ! -f "$PRIVILEGES_CLI" ]; then
@@ -104,9 +104,17 @@ else
   echo "elevation-start: WARNING — /etc/sudoers.d not found in /etc/sudoers; sudo logging will not work" >&2
 fi
 
-# Write drop-in directly — log_allowed overrides macOS Sequoia's !log_allowed default
-printf 'Defaults log_allowed\nDefaults logfile="%s"\n' "$SUDO_LOG" > "$SUDOERS_DROP_IN"
-chmod 440 "$SUDOERS_DROP_IN"
+# Write drop-in via temp file + visudo validation — prevents breaking sudo if syntax is wrong
+SUDOERS_TMP=$(mktemp /tmp/iru-sudoers-XXXXXX)
+chmod 440 "$SUDOERS_TMP"
+printf 'Defaults log_allowed\nDefaults logfile="%s"\n' "$SUDO_LOG" > "$SUDOERS_TMP"
+if visudo -c -f "$SUDOERS_TMP" 2>/dev/null; then
+  mv "$SUDOERS_TMP" "$SUDOERS_DROP_IN"
+  chmod 440 "$SUDOERS_DROP_IN"
+else
+  rm -f "$SUDOERS_TMP"
+  echo "elevation-start: ERROR — sudoers drop-in failed visudo check, sudo logging disabled" >&2
+fi
 : > "$SUDO_LOG"
 chmod 600 "$SUDO_LOG"
 echo "elevation-start: sudo command logging enabled → $SUDO_LOG"
@@ -206,12 +214,12 @@ if [ -n "$ELEVATION_END" ]; then
 from datetime import datetime
 import sys
 try:
-    dt = datetime.fromisoformat('$ELEVATION_END'.replace('Z', '+00:00'))
+    dt = datetime.fromisoformat(sys.argv[1].replace('Z', '+00:00'))
     local_dt = dt.astimezone()
     print(local_dt.strftime('%H %M'))
 except:
     sys.exit(1)
-" 2>/dev/null)
+" "$ELEVATION_END" 2>/dev/null)
   EXPIRE_HOUR=$(echo "$EXPIRE_LOCAL" | awk '{print $1}')
   EXPIRE_MINUTE=$(echo "$EXPIRE_LOCAL" | awk '{print $2}')
 
@@ -233,15 +241,7 @@ ts() { date '+%Y-%m-%d %H:%M:%S'; }
 
 acquire_iru_run_lock() {
   local waited=0
-  if [ -f "\$IRU_RUN_LOCK" ]; then
-    local lock_pid
-    lock_pid=\$(cat "\$IRU_RUN_LOCK" 2>/dev/null)
-    if [ -n "\$lock_pid" ] && ! kill -0 "\$lock_pid" 2>/dev/null; then
-      echo "\$(ts) expiration-runner: stale lock (PID \$lock_pid is dead) — removing"
-      rm -f "\$IRU_RUN_LOCK"
-    fi
-  fi
-  while [ -f "\$IRU_RUN_LOCK" ]; do
+  while ! (set -C; echo \$\$ > "\$IRU_RUN_LOCK") 2>/dev/null; do
     if [ \$waited -ge 120 ]; then
       echo "\$(ts) expiration-runner: iru run lock timed out after \${waited}s — proceeding"
       break
@@ -251,13 +251,12 @@ acquire_iru_run_lock() {
     if [ -n "\$lock_pid" ] && ! kill -0 "\$lock_pid" 2>/dev/null; then
       echo "\$(ts) expiration-runner: stale lock (PID \$lock_pid is dead) — removing"
       rm -f "\$IRU_RUN_LOCK"
-      break
+      continue
     fi
     echo "\$(ts) expiration-runner: iru run in progress (locked by PID \$lock_pid) — waiting..."
-    sleep 5
-    waited=\$((waited + 5))
+    sleep 1
+    waited=\$((waited + 1))
   done
-  echo \$\$ > "\$IRU_RUN_LOCK"
 }
 
 release_iru_run_lock() {
@@ -265,11 +264,11 @@ release_iru_run_lock() {
 }
 
 echo "\$(ts) expiration-runner: waiting 5s for log-collection tag propagation..."
-sleep 5
+sleep 1
 acquire_iru_run_lock
 trap '' TERM
 echo "\$(ts) expiration-runner: running iru run..."
-/usr/local/bin/iru run --reset-daily >> /var/log/iru-elevation.log 2>&1
+/usr/local/bin/kandji run --reset-daily >> /var/log/iru-elevation.log 2>&1
 echo "\$(ts) expiration-runner: iru run exited with code \$?"
 release_iru_run_lock
 launchctl unload "\$PLIST" 2>/dev/null
@@ -342,7 +341,9 @@ fi
 ts() { date '+%Y-%m-%d %H:%M:%S'; }
 
 check_network() {
-  curl -s --max-time 5 -o /dev/null -w "%{http_code}" https://captive.apple.com 2>/dev/null | grep -q "."
+  local status
+  status=$(curl -s --max-time 5 -o /dev/null -w "%{http_code}" https://captive.apple.com 2>/dev/null)
+  [ "$status" = "200" ]
 }
 
 revoke_admin() {
@@ -355,7 +356,7 @@ revoke_admin() {
         && echo "\$(ts) \$LOG_TAG: admin revoked via PrivilegesCLI (\$reason)" \
         || echo "\$(ts) \$LOG_TAG: PrivilegesCLI --remove returned non-zero"
     fi
-    /usr/local/bin/iru display-alert \
+    /usr/local/bin/kandji display-alert \
       --title "Admin Access Revoked" \
       --message "\$reason" \
       --no-wait
@@ -367,6 +368,68 @@ cleanup_daemon() {
   rm -f "\$PLIST_PATH" "\$REVOKE_PENDING_FLAG"
 }
 
+# Enforcement loop — called immediately when network loss is first detected, and
+# on subsequent daemon invocations while the flag is still set. Polls admin group
+# every 1s, checks network every 60s until backend is notified or 2h TTL expires.
+run_offline_enforcement_loop() {
+  local CREATED
+  CREATED=\$(cat "\$REVOKE_PENDING_FLAG" 2>/dev/null || echo 0)
+  local LAST_NETWORK_CHECK=0
+
+  while true; do
+    local NOW
+    NOW=\$(date +%s)
+
+    # Enforce standard user on every iteration
+    IS_ADMIN=\$(dseditgroup -o checkmember -m "\$CURRENT_USER" admin 2>/dev/null | grep -c "yes" || true)
+    if [ "\$IS_ADMIN" -gt 0 ]; then
+      echo "\$(ts) \$LOG_TAG: user re-granted admin while offline — re-revoking"
+      if [ -f "\$PRIVILEGES_CLI" ]; then
+        CURRENT_USER_UID=\$(id -u "\$CURRENT_USER")
+        launchctl asuser "\$CURRENT_USER_UID" sudo -u "\$CURRENT_USER" "\$PRIVILEGES_CLI" --remove 2>/dev/null || true
+      fi
+      dscl . -delete /Groups/admin GroupMembership "\$CURRENT_USER" 2>/dev/null || true
+      echo "\$(ts) \$LOG_TAG: admin re-revoked for \$CURRENT_USER"
+    fi
+
+    # Abandon after 2 hours
+    if [ \$((NOW - CREATED)) -gt 7200 ]; then
+      echo "\$(ts) \$LOG_TAG: revoke-pending TTL exceeded (2h) — cleaning up"
+      cleanup_daemon
+      exit 0
+    fi
+
+    # Check network every 60s
+    if [ \$((NOW - LAST_NETWORK_CHECK)) -ge 60 ]; then
+      LAST_NETWORK_CHECK=\$NOW
+      if check_network; then
+        echo "\$(ts) \$LOG_TAG: network restored — notifying backend of network-loss revocation"
+        REVOKE_PAYLOAD=\$(python3 -c "
+import json, sys
+print(json.dumps({'requestId': sys.argv[1], 'serial': sys.argv[2]}))
+" "\$REQUEST_ID" "\$SERIAL")
+        HTTP_STATUS=\$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 \
+          -X POST "\$REVOKE_ENDPOINT" \
+          -H "Content-Type: application/json" \
+          -H "x-api-key: \$API_KEY" \
+          -d "\$REVOKE_PAYLOAD" 2>/dev/null)
+        echo "\$(ts) \$LOG_TAG: revoke-network-loss response HTTP \$HTTP_STATUS"
+        if [ "\$HTTP_STATUS" = "200" ]; then
+          echo "\$(ts) \$LOG_TAG: backend notified, cleaning up"
+          cleanup_daemon
+          exit 0
+        else
+          echo "\$(ts) \$LOG_TAG: backend notification failed (HTTP \$HTTP_STATUS), will retry in 60s"
+        fi
+      else
+        echo "\$(ts) \$LOG_TAG: still offline — continuing enforcement loop"
+      fi
+    fi
+
+    sleep 1
+  done
+}
+
 IRU_RUN_LOCK="/var/run/iru-run.lock"
 
 # Acquire the iru run lock — waits up to 120s if another iru run is in progress.
@@ -374,15 +437,7 @@ IRU_RUN_LOCK="/var/run/iru-run.lock"
 # Uses /var/run/ so stale locks are cleared automatically on reboot.
 acquire_iru_run_lock() {
   local waited=0
-  if [ -f "\$IRU_RUN_LOCK" ]; then
-    local lock_pid
-    lock_pid=\$(cat "\$IRU_RUN_LOCK" 2>/dev/null)
-    if [ -n "\$lock_pid" ] && ! kill -0 "\$lock_pid" 2>/dev/null; then
-      echo "\$(ts) \$LOG_TAG: stale lock (PID \$lock_pid is dead) — removing"
-      rm -f "\$IRU_RUN_LOCK"
-    fi
-  fi
-  while [ -f "\$IRU_RUN_LOCK" ]; do
+  while ! (set -C; echo \$\$ > "\$IRU_RUN_LOCK") 2>/dev/null; do
     if [ \$waited -ge 120 ]; then
       echo "\$(ts) \$LOG_TAG: iru run lock timed out after \${waited}s — proceeding"
       break
@@ -392,13 +447,12 @@ acquire_iru_run_lock() {
     if [ -n "\$lock_pid" ] && ! kill -0 "\$lock_pid" 2>/dev/null; then
       echo "\$(ts) \$LOG_TAG: stale lock (PID \$lock_pid is dead) — removing"
       rm -f "\$IRU_RUN_LOCK"
-      break
+      continue
     fi
     echo "\$(ts) \$LOG_TAG: iru run in progress (locked by PID \$lock_pid) — waiting..."
-    sleep 5
-    waited=\$((waited + 5))
+    sleep 1
+    waited=\$((waited + 1))
   done
-  echo \$\$ > "\$IRU_RUN_LOCK"
 }
 
 release_iru_run_lock() {
@@ -410,38 +464,10 @@ if [ -z "\$CURRENT_USER" ] || [ "\$CURRENT_USER" = "root" ]; then
   exit 0
 fi
 
-# If a network-loss revocation is pending, wait for network and notify backend
+# If a stale revoke-pending flag exists from a previous daemon instance, enter
+# the offline enforcement loop immediately before doing anything else.
 if [ -f "\$REVOKE_PENDING_FLAG" ]; then
-  # Abandon retry after 2 hours — prevents infinite loop if backend is permanently unreachable
-  CREATED=\$(cat "\$REVOKE_PENDING_FLAG" 2>/dev/null || echo 0)
-  NOW=\$(date +%s)
-  if [ \$((NOW - CREATED)) -gt 7200 ]; then
-    echo "\$(ts) \$LOG_TAG: revoke-pending TTL exceeded (2h) — cleaning up"
-    cleanup_daemon
-    exit 0
-  fi
-  if check_network; then
-    echo "\$(ts) \$LOG_TAG: network restored — notifying backend of network-loss revocation"
-    REVOKE_PAYLOAD=\$(python3 -c "
-import json, sys
-print(json.dumps({'requestId': sys.argv[1], 'serial': sys.argv[2]}))
-" "\$REQUEST_ID" "\$SERIAL")
-    HTTP_STATUS=\$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 \
-      -X POST "\$REVOKE_ENDPOINT" \
-      -H "Content-Type: application/json" \
-      -H "x-api-key: \$API_KEY" \
-      -d "\$REVOKE_PAYLOAD" 2>/dev/null)
-    echo "\$(ts) \$LOG_TAG: revoke-network-loss response HTTP \$HTTP_STATUS"
-    if [ "\$HTTP_STATUS" = "200" ]; then
-      echo "\$(ts) \$LOG_TAG: backend notified, cleaning up"
-      cleanup_daemon
-    else
-      echo "\$(ts) \$LOG_TAG: backend notification failed, will retry next cycle"
-    fi
-  else
-    echo "\$(ts) \$LOG_TAG: still waiting for network to notify backend"
-  fi
-  exit 0
+  run_offline_enforcement_loop
 fi
 
 IS_ADMIN=\$(dseditgroup -o checkmember -m "\$CURRENT_USER" admin 2>/dev/null | grep -c "yes")
@@ -451,80 +477,118 @@ if [ "\$IS_ADMIN" -eq 0 ]; then
   exit 0
 fi
 
-# Check backend status — detect early revocation by IT
-# N5-04: capture HTTP status separately; only parse body on 200
-if [ -n "\$REQUEST_ID" ] && [ -n "\$STATUS_ENDPOINT" ]; then
-  STATUS_TMPFILE=\$(mktemp /tmp/iru-status-XXXXXX)
-  chmod 600 "\$STATUS_TMPFILE"
-  STATUS_HTTP=\$(curl -s -o "\$STATUS_TMPFILE" -w "%{http_code}" --max-time 10 \
-    -H "x-api-key: \$API_KEY" \
-    "\${STATUS_ENDPOINT}?requestId=\${REQUEST_ID}&serial=\${SERIAL}" 2>/dev/null)
-  # N6-13: distinguish auth failures (4xx) from transient errors (5xx/network)
-  case "\$STATUS_HTTP" in
-    200)
-      BACKEND_STATUS=\$(python3 -c "import json,sys; print(json.load(sys.stdin).get('status',''))" < "\$STATUS_TMPFILE" 2>/dev/null)
-      echo "\$(ts) \$LOG_TAG: backend status=\$BACKEND_STATUS"
-      if [ "\$BACKEND_STATUS" = "expired" ] || [ "\$BACKEND_STATUS" = "denied" ]; then
-        echo "\$(ts) \$LOG_TAG: backend reports revoked — revoking admin immediately"
-        revoke_admin "Your temporary admin access was revoked by IT."
-        rm -f "\$STATUS_TMPFILE"
-        # Ignore SIGTERM during iru run — cleanup_daemon calls launchctl unload
-        # which sends SIGTERM to this process and would kill iru run mid-execution.
-        trap '' TERM
-        echo "\$(ts) \$LOG_TAG: waiting 5s for log-collection tag propagation..."
-        sleep 5
-        acquire_iru_run_lock
-        echo "\$(ts) \$LOG_TAG: running iru run to pick up log-collection tag..."
-        /usr/local/bin/iru run --reset-daily >> /var/log/iru-elevation.log 2>&1
-        echo "\$(ts) \$LOG_TAG: iru run exited with code \$?"
-        release_iru_run_lock
-        # Verify revocation took effect — retry once after 30s if user is still admin
-        IS_ADMIN=\$(dseditgroup -o checkmember -m "\$CURRENT_USER" admin 2>/dev/null | grep -c "yes")
-        if [ "\$IS_ADMIN" -gt 0 ]; then
-          echo "\$(ts) \$LOG_TAG: admin not yet removed after first iru run — waiting 30s before retry..."
-          sleep 30
+echo "\$(ts) \$LOG_TAG: starting persistent monitor loop for \$CURRENT_USER"
+
+# Persistent main loop — runs for the lifetime of the elevation session.
+# Admin check:   every 1s  (catches immediate re-elevation via Privileges app)
+# Network check: every 5s  (detects network loss within 5 seconds)
+# Status check:  every 60s (detects IT revocation / expiration from backend)
+LAST_NETWORK_CHECK=0
+LAST_STATUS_CHECK=0
+
+while true; do
+  NOW=\$(date +%s)
+
+  # Re-read current user each cycle in case of console user change
+  CURRENT_USER=\$(stat -f "%Su" /dev/console)
+  if [ -z "\$CURRENT_USER" ] || [ "\$CURRENT_USER" = "root" ]; then
+    echo "\$(ts) \$LOG_TAG: no console user — cleaning up"
+    cleanup_daemon
+    exit 0
+  fi
+
+  # Re-read API key each cycle so key rotation takes effect without restart
+  API_KEY=\$(security find-generic-password -a "iru-temp-admin" -s "iru-temp-admin-api" -w /Library/Keychains/System.keychain 2>/dev/null)
+
+  # Admin group check — every cycle (1s)
+  IS_ADMIN=\$(dseditgroup -o checkmember -m "\$CURRENT_USER" admin 2>/dev/null | grep -c "yes")
+  if [ "\$IS_ADMIN" -eq 0 ]; then
+    echo "\$(ts) \$LOG_TAG: \$CURRENT_USER is no longer admin — cleaning up"
+    cleanup_daemon
+    exit 0
+  fi
+
+  # Network check — every 5s
+  if [ \$((NOW - LAST_NETWORK_CHECK)) -ge 5 ]; then
+    LAST_NETWORK_CHECK=\$NOW
+    if ! check_network; then
+      echo "\$(ts) \$LOG_TAG: network lost — revoking admin for \$CURRENT_USER"
+      revoke_admin "Your temporary admin access was revoked because network connectivity was lost."
+      date +%s > "\$REVOKE_PENDING_FLAG"
+      echo "\$(ts) \$LOG_TAG: pending flag set — entering 1s enforcement loop"
+      run_offline_enforcement_loop
+    fi
+  fi
+
+  # Backend status check — every 60s
+  if [ \$((NOW - LAST_STATUS_CHECK)) -ge 60 ] && [ -n "\$REQUEST_ID" ] && [ -n "\$STATUS_ENDPOINT" ]; then
+    LAST_STATUS_CHECK=\$NOW
+    STATUS_TMPFILE=\$(mktemp /tmp/iru-status-XXXXXX)
+    chmod 600 "\$STATUS_TMPFILE"
+    STATUS_HTTP=\$(curl -s -o "\$STATUS_TMPFILE" -w "%{http_code}" --max-time 10 \
+      -H "x-api-key: \$API_KEY" \
+      "\${STATUS_ENDPOINT}?requestId=\${REQUEST_ID}&serial=\${SERIAL}" 2>/dev/null)
+    case "\$STATUS_HTTP" in
+      200)
+        BACKEND_STATUS=\$(python3 -c "import json,sys; print(json.load(sys.stdin).get('status',''))" < "\$STATUS_TMPFILE" 2>/dev/null)
+        echo "\$(ts) \$LOG_TAG: backend status=\$BACKEND_STATUS"
+        if [ "\$BACKEND_STATUS" = "expired" ] || [ "\$BACKEND_STATUS" = "denied" ]; then
+          echo "\$(ts) \$LOG_TAG: backend reports revoked — revoking admin immediately"
+          revoke_admin "Your temporary admin access was revoked by IT."
+          rm -f "\$STATUS_TMPFILE"
+          trap '' TERM
+          sleep 1
           acquire_iru_run_lock
-          echo "\$(ts) \$LOG_TAG: retry iru run (revocation not yet confirmed)..."
-          /usr/local/bin/iru run --reset-daily >> /var/log/iru-elevation.log 2>&1
-          echo "\$(ts) \$LOG_TAG: retry iru run exited with code \$?"
+          echo "\$(ts) \$LOG_TAG: running iru run to pick up log-collection tag..."
+          /usr/local/bin/kandji run --reset-daily >> /var/log/iru-elevation.log 2>&1
+          echo "\$(ts) \$LOG_TAG: iru run exited with code \$?"
           release_iru_run_lock
           IS_ADMIN=\$(dseditgroup -o checkmember -m "\$CURRENT_USER" admin 2>/dev/null | grep -c "yes")
           if [ "\$IS_ADMIN" -gt 0 ]; then
-            echo "\$(ts) \$LOG_TAG: WARNING — user still admin after retry; collect-sudo-log.sh may need investigation"
+            echo "\$(ts) \$LOG_TAG: admin not yet removed after first iru run — waiting 10s before retry..."
+            sleep 10
+            acquire_iru_run_lock
+            echo "\$(ts) \$LOG_TAG: retry iru run (revocation not yet confirmed)..."
+            /usr/local/bin/kandji run --reset-daily >> /var/log/iru-elevation.log 2>&1
+            echo "\$(ts) \$LOG_TAG: retry iru run exited with code \$?"
+            release_iru_run_lock
+            IS_ADMIN=\$(dseditgroup -o checkmember -m "\$CURRENT_USER" admin 2>/dev/null | grep -c "yes")
+            if [ "\$IS_ADMIN" -gt 0 ]; then
+              echo "\$(ts) \$LOG_TAG: WARNING — user still admin after retry"
+            else
+              echo "\$(ts) \$LOG_TAG: revocation confirmed after retry"
+            fi
           else
-            echo "\$(ts) \$LOG_TAG: revocation confirmed after retry"
+            echo "\$(ts) \$LOG_TAG: revocation confirmed"
           fi
-        else
-          echo "\$(ts) \$LOG_TAG: revocation confirmed"
+          cleanup_daemon
+          exit 0
         fi
-        # Keep SIGTERM ignored through cleanup — restoring it before launchctl unload
-        # causes the process to be killed before rm -f completes, leaving stale files.
+        ;;
+      401|403)
+        echo "\$(ts) \$LOG_TAG: auth error \$STATUS_HTTP from backend — revoking access (fail-secure)"
+        revoke_admin "Your temporary admin access was revoked due to an authorization error."
+        rm -f "\$STATUS_TMPFILE"
         cleanup_daemon
         exit 0
-      fi
-      ;;
-    401|403)
-      echo "\$(ts) \$LOG_TAG: auth error \$STATUS_HTTP from backend — revoking access (fail-secure)"
-      revoke_admin "Your temporary admin access was revoked due to an authorization error."
-      rm -f "\$STATUS_TMPFILE"
-      cleanup_daemon
-      exit 0
-      ;;
-    *)
-      echo "\$(ts) \$LOG_TAG: status check returned HTTP \$STATUS_HTTP — transient error, will retry next cycle"
-      ;;
-  esac
-  rm -f "\$STATUS_TMPFILE"
-fi
+        ;;
+      000)
+        echo "\$(ts) \$LOG_TAG: status check returned HTTP 000 — treating as network loss"
+        revoke_admin "Your temporary admin access was revoked because network connectivity was lost."
+        date +%s > "\$REVOKE_PENDING_FLAG"
+        echo "\$(ts) \$LOG_TAG: pending flag set — entering 1s enforcement loop"
+        rm -f "\$STATUS_TMPFILE"
+        run_offline_enforcement_loop
+        ;;
+      *)
+        echo "\$(ts) \$LOG_TAG: status check returned HTTP \$STATUS_HTTP — transient error, will retry in 60s"
+        ;;
+    esac
+    rm -f "\$STATUS_TMPFILE"
+  fi
 
-if ! check_network; then
-  echo "\$(ts) \$LOG_TAG: network lost — revoking admin for \$CURRENT_USER"
-  revoke_admin "Your temporary admin access was revoked because network connectivity was lost."
-  date +%s > "\$REVOKE_PENDING_FLAG"
-  echo "\$(ts) \$LOG_TAG: pending flag set, will notify backend when network returns"
-else
-  echo "\$(ts) \$LOG_TAG: network OK"
-fi
+  sleep 1
+done
 MONITOR_EOF
 
 chmod 700 "$MONITOR_SCRIPT"
@@ -555,6 +619,8 @@ cat > "$PLIST_PATH" << PLIST_EOF
 PLIST_EOF
 
 chmod 644 "$PLIST_PATH"
+# Clear any stale revoke-pending flag from a previous session before loading the daemon
+rm -f "/var/tmp/iru-revoke-network-pending"
 # Load the LaunchDaemon
 launchctl load "$PLIST_PATH"
 echo "elevation-start: network monitor LaunchDaemon installed and loaded"
