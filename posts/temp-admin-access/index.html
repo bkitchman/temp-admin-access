@@ -270,6 +270,29 @@
     position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0;
   }
 
+  /* ── Screenshots ── */
+  .screenshot-wrap {
+    margin: 1.5rem 0 2rem;
+    border-radius: var(--radius);
+    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0,0,0,.18);
+    border: 1px solid var(--border);
+  }
+  .screenshot-wrap img {
+    width: 100%; display: block;
+  }
+  .screenshot-caption {
+    font-size: .8rem; color: var(--text-muted);
+    text-align: center; padding: .6rem 1rem;
+    background: var(--surface); border-top: 1px solid var(--border);
+    font-style: italic;
+  }
+  .screenshot-grid {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 1.25rem; margin: 1.5rem 0 2rem;
+  }
+  @media (max-width: 700px) { .screenshot-grid { grid-template-columns: 1fr; } }
+
   /* ── Footer ── */
   footer {
     background: var(--navy); color: #475569;
@@ -373,12 +396,20 @@
           <span>A compiled AppKit form presents a single window with a reason field, duration picker (5, 10, 15, or 30 minutes), and category selector (Install, Debug, Config, Security, Developer, Other). The script collects device identity (hostname, serial) and POSTs a signed request to an API Gateway endpoint.</span>
         </div>
       </div>
+      <div class="screenshot-wrap fade-in">
+        <img src="img/screenshot-request-form.jpg" alt="Single-screen AppKit request form showing reason, duration, and category fields">
+        <div class="screenshot-caption">The compiled AppKit form — all three fields in one window. Duration uses a segmented control; category uses radio buttons, both of which work reliably under the <code>launchctl asuser + sudo</code> execution context.</div>
+      </div>
       <div class="flow-step">
         <div class="step-num">2</div>
         <div class="step-text">
           <strong>IT receives an interactive Slack approval message</strong>
           <span>The message shows user, hostname, serial, reason, and category. IT sees four duration-labeled Approve buttons (5/10/15/30 min) — they can approve at the user's requested duration or override it — plus a Deny button. Posted to a dedicated IT channel.</span>
         </div>
+      </div>
+      <div class="screenshot-wrap fade-in">
+        <img src="img/screenshot-slack-approval.jpg" alt="Slack approval card showing full request details and approve/deny buttons">
+        <div class="screenshot-caption">The Slack approval card — device hostname, serial, reason, category, and requested duration all visible at a glance. IT can approve at any duration or deny outright.</div>
       </div>
       <div class="flow-step">
         <div class="step-num">3</div>
@@ -387,12 +418,20 @@
           <span>A background LaunchDaemon polls <code>/status</code> every 20 seconds. On approval, it calls <code>iru run</code> directly — the fastest path to processing Library Items. The user sees an "approved" alert within 20 seconds. Each duration maps to a distinct Iru tag, which scopes its own SAP Privileges MDM profile with the matching <code>ExpirationInterval</code>.</span>
         </div>
       </div>
+      <div class="screenshot-wrap fade-in">
+        <img src="img/screenshot-approved-notification.jpg" alt="Device notification showing admin access approved, with Slack thread visible in background">
+        <div class="screenshot-caption">The user receives an on-device alert within seconds of IT approving. The background approval-monitor LaunchDaemon polls the backend and triggers <code>kandji run</code> to apply the elevation tag immediately.</div>
+      </div>
       <div class="flow-step">
         <div class="step-num">4</div>
         <div class="step-text">
           <strong>Device runs elevation-start.sh via Iru Library Item</strong>
           <span>Calls <code>PrivilegesCLI --add</code> to grant admin, enables a sudoers drop-in for command logging, notifies the backend to start the N-minute timer (where N is the approved duration), installs a network monitor LaunchDaemon.</span>
         </div>
+      </div>
+      <div class="screenshot-wrap fade-in">
+        <img src="img/screenshot-it-controls.jpg" alt="Slack thread showing IT controls — Revoke Now and Lock Device buttons">
+        <div class="screenshot-caption">After elevation is confirmed, the Slack thread updates with IT controls: <strong>Revoke Now</strong> immediately strips access, <strong>Lock Device</strong> issues an MDM lock command. The thread becomes a full audit trail for the session.</div>
       </div>
       <div class="flow-step">
         <div class="step-num">5</div>
@@ -408,10 +447,19 @@
           <span>A second Iru tag triggers <code>collect-sudo-log.sh</code>, which ships the sudoers log to the backend. The backend uploads it as a file attachment in the original Slack approval thread.</span>
         </div>
       </div>
+      <div class="screenshot-wrap fade-in">
+        <img src="img/screenshot-network-revocation.jpg" alt="Slack thread showing access revoked by IT and sudo log collected">
+        <div class="screenshot-caption">On expiration or revocation, the Slack thread shows the final status and the collected sudo log is attached inline. Every <code>sudo</code> command the user ran during the session is visible to IT without leaving Slack.</div>
+      </div>
     </div>
 
     <!-- ARCHITECTURE -->
     <h2 id="architecture">Architecture</h2>
+
+    <div class="screenshot-wrap fade-in">
+      <img src="img/screenshot-iru-blueprint.png" alt="Iru Blueprint showing conditional tag-based Library Item assignment for each duration">
+      <div class="screenshot-caption">The Iru Blueprint — tag-based conditional logic assigns the correct SAP Privileges profile (5, 10, 15, or 30 min) when the matching elevation tag is present, then triggers elevation-start and log collection scripts in sequence.</div>
+    </div>
 
     <p class="fade-in">The backend is a fully serverless AWS SAM application. There's no always-on infrastructure — all compute is Lambda functions invoked by API Gateway or EventBridge Scheduler.</p>
 
