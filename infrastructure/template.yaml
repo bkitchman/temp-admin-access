@@ -108,10 +108,24 @@ Parameters:
     Type: String
     Default: '13'
     Description: Business hours start in UTC (0-23), e.g. 13 = 9am ET. Requests outside this window are auto-approved when an on-call admin is set.
+    AllowedValues: ['0','1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16','17','18','19','20','21','22','23']
   BusinessHoursUtcEnd:
     Type: String
     Default: '23'
     Description: Business hours end in UTC (0-23), e.g. 23 = 7pm ET.
+    AllowedValues: ['0','1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16','17','18','19','20','21','22','23']
+  DashboardApiKey:
+    Type: String
+    NoEcho: true
+    Description: API key for the IT admin risk dashboard (separate from SELF_SERVICE_API_KEY)
+  DashboardUrl:
+    Type: String
+    Default: ''
+    Description: CloudFront URL of the dashboard (leave blank on first deploy; set after stack creates the distribution)
+  BedrockModelId:
+    Type: String
+    Default: 'anthropic.claude-3-5-haiku-20241022-v1:0'
+    Description: Amazon Bedrock model ID to use for AI risk scoring
 
 # ---------------------------------------------------------------------------
 # Resources
@@ -140,6 +154,111 @@ Resources:
       SSESpecification:
         SSEEnabled: true
         SSEType: KMS
+
+  # -------------------------------------------------------------------------
+  # DynamoDB — AI risk scores (per-user, 48-hour TTL)
+  # -------------------------------------------------------------------------
+  RiskScoresTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: admin-access-risk-scores
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: username
+          AttributeType: S
+      KeySchema:
+        - AttributeName: username
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+
+  # -------------------------------------------------------------------------
+  # DynamoDB — single-use dashboard access tokens (7-day TTL)
+  # -------------------------------------------------------------------------
+  DashboardTokensTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: admin-access-dashboard-tokens
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: token
+          AttributeType: S
+      KeySchema:
+        - AttributeName: token
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+
+  # -------------------------------------------------------------------------
+  # S3 bucket — private storage for the dashboard static files
+  # -------------------------------------------------------------------------
+  DashboardBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'admin-access-dashboard-${AWS::AccountId}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  DashboardBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref DashboardBucket
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub '${DashboardBucket.Arn}/*'
+
+  # -------------------------------------------------------------------------
+  # CloudFront Origin Access Control — allows CloudFront to read the S3 bucket
+  # without making the bucket public
+  # -------------------------------------------------------------------------
+  DashboardOAC:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub 'admin-access-dashboard-oac-${AWS::StackName}'
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  # -------------------------------------------------------------------------
+  # CloudFront distribution — serves the dashboard over HTTPS
+  # -------------------------------------------------------------------------
+  DashboardDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Comment: Admin Access Risk Dashboard
+        DefaultRootObject: index.html
+        Enabled: true
+        HttpVersion: http2
+        PriceClass: PriceClass_100
+        DefaultCacheBehavior:
+          TargetOriginId: DashboardS3Origin
+          ViewerProtocolPolicy: redirect-to-https
+          # AWS managed cache policy: CachingDisabled — dashboard should always be current
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+          Compress: true
+        Origins:
+          - Id: DashboardS3Origin
+            DomainName: !GetAtt DashboardBucket.RegionalDomainName
+            S3OriginConfig:
+              OriginAccessIdentity: ''
+            OriginAccessControlId: !GetAtt DashboardOAC.Id
 
   # -------------------------------------------------------------------------
   # IAM Role — EventBridge Scheduler → Lambda invocation
@@ -179,10 +298,14 @@ Resources:
       Environment:
         Variables:
           PROCESS_SLACK_ACTION_FUNCTION_ARN: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:admin-access-processSlackAction'
+          COMPUTE_RISK_SCORE_FUNCTION_ARN: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:admin-access-computeRiskScore'
+          RISK_SCORES_TABLE_NAME: admin-access-risk-scores
           ON_CALL_SLACK_USER_ID: !Ref OnCallSlackUserId
           ON_CALL_SLACK_USERNAME: !Ref OnCallSlackUsername
           BUSINESS_HOURS_UTC_START: !Ref BusinessHoursUtcStart
           BUSINESS_HOURS_UTC_END: !Ref BusinessHoursUtcEnd
+          DASHBOARD_URL: !Ref DashboardUrl
+          DASHBOARD_TOKENS_TABLE_NAME: admin-access-dashboard-tokens
       Events:
         Api:
           Type: Api
@@ -192,10 +315,16 @@ Resources:
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref RequestsTable
+        - DynamoDBReadPolicy:
+            TableName: admin-access-risk-scores
+        - DynamoDBCrudPolicy:
+            TableName: admin-access-dashboard-tokens
         - Statement:
             - Effect: Allow
               Action: lambda:InvokeFunction
-              Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:admin-access-processSlackAction'
+              Resource:
+                - !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:admin-access-processSlackAction'
+                - !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:admin-access-computeRiskScore'
 
   # -------------------------------------------------------------------------
   # Lambda: handleSlackAction  POST /slack/actions
@@ -425,6 +554,9 @@ Resources:
       FunctionName: admin-access-receiveLog
       Handler: receiveLog/index.handler
       Description: Receives sudo log from device and uploads it to the Slack thread
+      Environment:
+        Variables:
+          COMPUTE_RISK_SCORE_FUNCTION_ARN: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:admin-access-computeRiskScore'
       Events:
         Api:
           Type: Api
@@ -432,8 +564,67 @@ Resources:
             Path: /log
             Method: post
       Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref RequestsTable
+        - Statement:
+            - Effect: Allow
+              Action: lambda:InvokeFunction
+              Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:admin-access-computeRiskScore'
+
+  # -------------------------------------------------------------------------
+  # Lambda: computeRiskScore  (async, invoked by handleRequest)
+  # Calls Amazon Bedrock (Claude) to evaluate a user's risk profile
+  # -------------------------------------------------------------------------
+  ComputeRiskScoreFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: admin-access-computeRiskScore
+      Handler: computeRiskScore/index.handler
+      Description: Evaluates AI risk score for a user based on their admin access history
+      Timeout: 60
+      Environment:
+        Variables:
+          BEDROCK_MODEL_ID: !Ref BedrockModelId
+      Policies:
         - DynamoDBReadPolicy:
             TableName: !Ref RequestsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref RiskScoresTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+              Resource: !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/${BedrockModelId}'
+
+  # -------------------------------------------------------------------------
+  # Lambda: getRiskDashboard  GET /dashboard
+  # Returns request history and risk scores for the IT admin dashboard UI
+  # -------------------------------------------------------------------------
+  GetRiskDashboardFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: admin-access-getRiskDashboard
+      Handler: getRiskDashboard/index.handler
+      Description: Returns admin request history and AI risk scores for the IT dashboard
+      Environment:
+        Variables:
+          DASHBOARD_API_KEY: !Ref DashboardApiKey
+          DASHBOARD_CORS_ORIGIN: !Sub 'https://${DashboardDistribution.DomainName}'
+          DASHBOARD_TOKENS_TABLE_NAME: admin-access-dashboard-tokens
+          RISK_SCORES_TABLE_NAME: admin-access-risk-scores
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /dashboard
+            Method: get
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref RequestsTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref RiskScoresTable
+        - DynamoDBCrudPolicy:
+            TableName: admin-access-dashboard-tokens
 
 # ---------------------------------------------------------------------------
 # Outputs
@@ -466,6 +657,22 @@ Outputs:
   DynamoDBTableName:
     Description: DynamoDB table name
     Value: !Ref RequestsTable
+
+  RiskScoresTableName:
+    Description: DynamoDB risk scores table name
+    Value: !Ref RiskScoresTable
+
+  DashboardBucketName:
+    Description: S3 bucket that hosts the dashboard static files
+    Value: !Ref DashboardBucket
+
+  DashboardUrl:
+    Description: CloudFront URL for the IT admin risk dashboard
+    Value: !Sub 'https://${DashboardDistribution.DomainName}'
+
+  DashboardEndpoint:
+    Description: IT admin risk dashboard API endpoint
+    Value: !Sub 'https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/dashboard'
 
   SlashCommandEndpoint:
     Description: Slack slash command request URL — register at api.slack.com/apps under Slash Commands

@@ -3,6 +3,9 @@ const { escapeSlack } = slack;
 const dynamo = require('../shared/dynamo');
 const iru = require('../shared/iru');
 const { isValidUUID } = require('../shared/validate');
+const { LambdaClient, InvokeCommand } = require('@aws-sdk/client-lambda');
+
+const lambdaClient = new LambdaClient({});
 
 exports.handler = async (event) => {
   try {
@@ -23,7 +26,7 @@ exports.handler = async (event) => {
       return respond(400, { error: 'Invalid JSON body' });
     }
 
-    const { requestId, serial, logContent } = body;
+    let { requestId, serial, logContent } = body;
     if (!requestId || !serial || logContent === undefined) {
       return respond(400, { error: 'Missing required fields: requestId, serial, logContent' });
     }
@@ -38,6 +41,19 @@ exports.handler = async (event) => {
     // (The previous check was a tautological no-op.)
     if (Buffer.from(logContent, 'utf8').toString('utf8') !== logContent) {
       return respond(400, { error: 'logContent must be valid UTF-8' });
+    }
+
+    // Normalize log: strip metadata fields, keep only time + command.
+    // Also strips PrivilegesCLI --remove lines (system revocations, not user commands).
+    if (typeof logContent === 'string') {
+      logContent = logContent
+        .split('\n')
+        .filter(line => line.includes('COMMAND='))
+        .filter(line => !line.includes('PrivilegesCLI') || !line.includes('--remove'))
+        .map(normalizeSudoLine)
+        .filter(Boolean)
+        .join('\n')
+        .trim();
     }
 
     // 3. Fetch the request from DynamoDB to get the Slack thread details
@@ -68,11 +84,24 @@ exports.handler = async (event) => {
       slackText
     );
 
-    // 5. Remove the log collection tag — cleanup, prevents script re-running
+    // 5. Store log content on the request record for the dashboard
+    await dynamo.updateRequest(requestId, { logContent });
+
+    // Trigger risk score re-evaluation now that actual commands are available
+    const riskScoreArn = process.env.COMPUTE_RISK_SCORE_FUNCTION_ARN;
+    if (riskScoreArn) {
+      lambdaClient.send(new InvokeCommand({
+        FunctionName: riskScoreArn,
+        InvocationType: 'Event',
+        Payload: JSON.stringify({ username: request.requestingUser })
+      })).catch(err => console.warn('receiveLog: failed to trigger risk score refresh:', err.message));
+    }
+
+    // 6. Remove the log collection tag — cleanup, prevents script re-running
     await iru.removeLogCollectionTag(request.iruDeviceId);
     console.log(`receiveLog: removed log collection tag from device ${request.iruDeviceId}`);
 
-    // 6. Update the original approval message to its final completed state — removes all buttons
+    // 7. Update the original approval message to its final completed state — removes all buttons
     const outcome = request.lockedByIT ? 'locked'
       : request.revokedByNetworkLoss ? 'network_loss'
       : request.revokedEarly ? 'revoked_early'
@@ -92,7 +121,7 @@ exports.handler = async (event) => {
       // Non-fatal — log is already posted to the thread
     }
 
-    // 7. DM the user now that logs are in hand — delayed from revocation time
+    // 8. DM the user now that logs are in hand — delayed from revocation time
     //    so the user isn't notified until the audit trail is secured.
     if (request.slackUserId) {
       let dmText;
@@ -115,6 +144,20 @@ exports.handler = async (event) => {
     return respond(500, { error: 'Internal server error' });
   }
 };
+
+// Reduce a raw sudo log line to "HH:MM:SS  <command>".
+// Handles both sudoers logfile format and macOS unified log format.
+function normalizeSudoLine(line) {
+  const cmdMatch = line.match(/COMMAND=(.+)$/);
+  if (!cmdMatch) return null;
+  const command = cmdMatch[1].trim();
+
+  // Try to extract a time component (HH:MM:SS) from anywhere in the line
+  const timeMatch = line.match(/\b(\d{2}:\d{2}:\d{2})/);
+  const time = timeMatch ? timeMatch[1] : '';
+
+  return time ? `${time}  ${command}` : command;
+}
 
 function respond(statusCode, body) {
   return {

@@ -78,9 +78,16 @@ const CATEGORY_DISPLAY = {
   other:     '📝 Other'
 };
 
+const RISK_LEVEL_BADGE = {
+  low:      '🟢 Low',
+  medium:   '🟡 Medium',
+  high:     '🟠 High',
+  critical: '🔴 Critical'
+};
+
 // Post interactive approval message to IT channel
 // Returns { channel, ts } to store as the thread anchor
-async function postApprovalMessage({ requestId, username, hostname, serial, reason, reasonCategory, duration }) {
+async function postApprovalMessage({ requestId, username, hostname, serial, reason, reasonCategory, duration, riskScore, dashboardUrl }) {
   const safeUsername = escapeSlack(username);
   const safeHostname = escapeSlack(hostname);
   const safeSerial = escapeSlack(serial);
@@ -139,6 +146,7 @@ async function postApprovalMessage({ requestId, username, hostname, serial, reas
         text: { type: 'plain_text', text: `Reason: ${safeReason}`, emoji: false }
       },
       { type: 'divider' },
+      ...buildRiskScoreBlock(riskScore, dashboardUrl, username),
       {
         type: 'actions',
         elements: [...approvalButtons, denyButton]
@@ -147,6 +155,38 @@ async function postApprovalMessage({ requestId, username, hostname, serial, reas
   });
 
   return { channel: data.channel, ts: data.ts };
+}
+
+// Build a context block showing the AI risk score and a link to the dashboard.
+// Returns an array of blocks (empty if no score and no URL).
+function buildRiskScoreBlock(riskScore, dashboardUrl, username) {
+  const parts = [];
+
+  if (riskScore) {
+    const badge = RISK_LEVEL_BADGE[riskScore.level] || `Score: ${riskScore.score}`;
+    parts.push(`*AI Risk Score:* ${badge} (${riskScore.score}/100)`);
+    if (riskScore.requestCount != null) {
+      parts.push(`${riskScore.requestCount} prior request${riskScore.requestCount !== 1 ? 's' : ''}`);
+    }
+    if (riskScore.summary) {
+      parts.push(escapeSlack(riskScore.summary));
+    }
+  }
+
+  if (dashboardUrl) {
+    const safeUser = escapeSlack(username);
+    parts.push(`<${dashboardUrl}|📊 View ${safeUser}'s request history>`);
+  }
+
+  if (parts.length === 0) return [];
+
+  return [
+    { type: 'divider' },
+    {
+      type: 'context',
+      elements: parts.map(text => ({ type: 'mrkdwn', text }))
+    }
+  ];
 }
 
 // Replace the content of a posted message

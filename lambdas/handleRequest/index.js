@@ -7,6 +7,23 @@ const { LambdaClient, InvokeCommand } = require('@aws-sdk/client-lambda');
 
 const lambdaClient = new LambdaClient({});
 
+// Async-invoke computeRiskScore to refresh risk score after a new request is created.
+// Fire-and-forget — errors are logged but do not affect the request flow.
+async function triggerRiskScoreRefresh(username) {
+  const arn = process.env.COMPUTE_RISK_SCORE_FUNCTION_ARN;
+  if (!arn) return;
+  try {
+    await lambdaClient.send(new InvokeCommand({
+      FunctionName: arn,
+      InvocationType: 'Event',
+      Payload: JSON.stringify({ username })
+    }));
+    console.log(`handleRequest: triggered risk score refresh for "${username}"`);
+  } catch (err) {
+    console.warn(`handleRequest: failed to trigger risk score refresh for "${username}":`, err.message);
+  }
+}
+
 // Classify request reason into a category for IT visibility and trend analysis.
 // N6-03: use .includes() instead of regex — avoids ReDoS on untrusted input.
 const REASON_KEYWORDS = {
@@ -103,6 +120,36 @@ exports.handler = async (event) => {
     // 5. Resolve the user's Slack ID using their email (provided by Iru $EMAIL variable)
     const slackUserId = email ? await slack.lookupSlackUserByEmail(email) : null;
 
+    // 5b. Look up cached risk score for this user (best-effort — never blocks the request)
+    let cachedRiskScore = null;
+    try {
+      cachedRiskScore = await dynamo.getRiskScore(username);
+      if (cachedRiskScore) {
+        console.log(`handleRequest: cached risk score for "${username}": ${cachedRiskScore.score} (${cachedRiskScore.level})`);
+      }
+    } catch (err) {
+      console.warn(`handleRequest: could not fetch risk score for "${username}":`, err.message);
+    }
+
+    // 5c. Generate a single-use dashboard token for this request's Slack link
+    let dashboardUrl = null;
+    if (process.env.DASHBOARD_URL) {
+      const dashboardToken = uuidv4();
+      const tokenTtl = Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60; // 7 days
+      try {
+        await dynamo.putDashboardToken({
+          token: dashboardToken,
+          requestId,
+          username,
+          createdAt: new Date().toISOString(),
+          ttl: tokenTtl
+        });
+        dashboardUrl = `${process.env.DASHBOARD_URL}?user=${encodeURIComponent(username)}&token=${dashboardToken}`;
+      } catch (err) {
+        console.warn(`handleRequest: could not store dashboard token for "${username}":`, err.message);
+      }
+    }
+
     // 6. Post interactive approval message to the IT Slack channel
     const { channel: slackChannelId, ts: slackThreadTs } = await slack.postApprovalMessage({
       requestId,
@@ -111,7 +158,9 @@ exports.handler = async (event) => {
       serial,
       reason,
       reasonCategory,
-      duration: parsedDuration
+      duration: parsedDuration,
+      riskScore: cachedRiskScore,
+      dashboardUrl
     });
 
     // 7. Persist the request in DynamoDB with status: pending
@@ -173,6 +222,9 @@ exports.handler = async (event) => {
         }
       }
     }
+
+    // Async-invoke computeRiskScore to refresh the cached score for next time
+    await triggerRiskScoreRefresh(username);
 
     return respond(200, { message: 'Request submitted successfully', requestId });
   } catch (err) {
