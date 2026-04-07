@@ -17,6 +17,9 @@ exports.handler = async (event) => {
     if (!isValidUUID(requestId)) {
       return respond(400, { error: 'Invalid requestId format' });
     }
+    if (!/^[A-Z0-9]{8,14}$/.test(serial)) {
+      return respond(400, { error: 'Invalid serial number format' });
+    }
 
     const request = await dynamo.getRequest(requestId);
     if (!request) {

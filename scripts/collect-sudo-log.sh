@@ -107,11 +107,11 @@ LOCAL_START=$(timeout 5 python3 -c "
 from datetime import datetime
 import sys
 try:
-    dt = datetime.fromisoformat('$START_TIME'.replace('Z', '+00:00'))
+    dt = datetime.fromisoformat(sys.argv[1].replace('Z', '+00:00'))
     print(dt.astimezone().strftime('%Y-%m-%d %H:%M:%S'))
 except Exception as e:
     sys.exit(1)
-" 2>/dev/null)
+" "$START_TIME" 2>/dev/null)
 TIMEZONE_DEGRADED=""
 if [ -z "$LOCAL_START" ] || ! echo "$LOCAL_START" | grep -qE '^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}$'; then
   echo "$(ts) collect-sudo-log: WARNING — could not convert START_TIME to local time, skipping unified log source"
@@ -123,11 +123,11 @@ LOCAL_END=$(timeout 5 python3 -c "
 from datetime import datetime
 import sys
 try:
-    dt = datetime.fromisoformat('$END_TIME'.replace('Z', '+00:00'))
+    dt = datetime.fromisoformat(sys.argv[1].replace('Z', '+00:00'))
     print(dt.astimezone().strftime('%Y-%m-%d %H:%M:%S'))
 except Exception as e:
     sys.exit(1)
-" 2>/dev/null)
+" "$END_TIME" 2>/dev/null)
 if [ -z "$LOCAL_END" ] || ! echo "$LOCAL_END" | grep -qE '^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}$'; then
   echo "$(ts) collect-sudo-log: WARNING — could not convert END_TIME to local time, skipping unified log source"
   LOCAL_END=""
@@ -211,8 +211,8 @@ while [ $ATTEMPT -lt 3 ]; do
   if [ "$HTTP_STATUS" = "200" ]; then
     break
   fi
-  echo "$(ts) collect-sudo-log: attempt $ATTEMPT returned HTTP $HTTP_STATUS — retrying in 5s" >&2
-  [ $ATTEMPT -lt 3 ] && sleep 5
+  echo "$(ts) collect-sudo-log: attempt $ATTEMPT returned HTTP $HTTP_STATUS — retrying in 1s" >&2
+  [ $ATTEMPT -lt 3 ] && sleep 1
 done
 
 if [ "$HTTP_STATUS" = "200" ]; then
@@ -255,8 +255,11 @@ if [ "$HTTP_STATUS" = "200" ]; then
   fi
   rm -f "$RUNNER_SCRIPT" 2>/dev/null
 
-  # Release the iru run lock if we're cleaning up mid-run
-  rm -f /var/run/iru-run.lock 2>/dev/null
+  # Release the iru run lock only if this process owns it
+  LOCK_PID=$(cat /var/run/iru-run.lock 2>/dev/null)
+  if [ "$LOCK_PID" = "$$" ]; then
+    rm -f /var/run/iru-run.lock
+  fi
 else
   echo "$(ts) collect-sudo-log: upload failed with HTTP $HTTP_STATUS" >&2
   exit 1

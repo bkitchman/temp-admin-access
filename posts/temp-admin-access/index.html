@@ -347,6 +347,16 @@
 
     <div class="video-wrap fade-in">
       <iframe
+        src="https://www.youtube.com/embed/KQyvBlWIy5M"
+        title="Temporary Admin Access — latest demo"
+        frameborder="0"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        allowfullscreen>
+      </iframe>
+    </div>
+
+    <div class="video-wrap fade-in">
+      <iframe
         src="https://www.youtube.com/embed/mqxZDVmA0wI"
         title="Temporary Admin Access Workflow — full demo including log tail"
         frameborder="0"
@@ -360,7 +370,7 @@
         <div class="step-num">1</div>
         <div class="step-text">
           <strong>User opens Iru Self Service and clicks "Request Admin Access"</strong>
-          <span>A script prompts for a reason, a duration (5, 10, 15, or 30 minutes), and a reason category (Install, Debug, Config, Security, Developer, Other) via osascript dialogs. Collects device identity (hostname, serial) and POSTs a signed request to an API Gateway endpoint.</span>
+          <span>A compiled AppKit form presents a single window with a reason field, duration picker (5, 10, 15, or 30 minutes), and category selector (Install, Debug, Config, Security, Developer, Other). The script collects device identity (hostname, serial) and POSTs a signed request to an API Gateway endpoint.</span>
         </div>
       </div>
       <div class="flow-step">

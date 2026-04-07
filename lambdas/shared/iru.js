@@ -9,11 +9,6 @@ const ELEVATION_TAG_10MIN = process.env.IRU_ELEVATION_TAG_10MIN;
 const ELEVATION_TAG_15MIN = process.env.IRU_ELEVATION_TAG_15MIN;
 const ELEVATION_TAG_30MIN = process.env.IRU_ELEVATION_TAG_30MIN;
 
-// Fail loudly at Lambda cold-start if any duration tag env var is missing
-if (!ELEVATION_TAG_5MIN || !ELEVATION_TAG_10MIN || !ELEVATION_TAG_15MIN || !ELEVATION_TAG_30MIN) {
-  throw new Error('Missing IRU elevation tag environment variable(s) — all four duration tags (5/10/15/30 min) must be configured');
-}
-
 const DURATION_TAG_MAP = {
   5:  ELEVATION_TAG_5MIN,
   10: ELEVATION_TAG_10MIN,
@@ -69,7 +64,7 @@ async function iruRequest(method, path, body, attempt = 1) {
     console.error(`Iru ${method} ${path} failed: HTTP ${response.status}${errDetail}`);
     // N7-10: retry on transient 5xx/429 — do not retry 4xx (auth/not-found errors)
     if (attempt < 3 && (response.status >= 500 || response.status === 429)) {
-      const backoffMs = attempt * 1000;
+      const backoffMs = attempt === 1 ? 1000 : 10000;
       console.warn(`Iru retrying in ${backoffMs}ms...`);
       await new Promise(r => setTimeout(r, backoffMs));
       return iruRequest(method, path, body, attempt + 1);
@@ -85,7 +80,7 @@ async function iruRequest(method, path, body, attempt = 1) {
 
 // Resolve serial number to Iru device object — returns { device_id, tags, ... }
 async function getDeviceBySerial(serial) {
-  const devices = await iruRequest('GET', `/v1/devices?serial_number=${encodeURIComponent(serial)}`);
+  const devices = await iruRequest('GET', `/api/v1/devices?serial_number=${encodeURIComponent(serial)}`);
   if (!devices || devices.length === 0) {
     throw new Error(`No Iru device found for serial: ${serial}`);
   }
@@ -94,7 +89,7 @@ async function getDeviceBySerial(serial) {
 
 // Get full device details including current tags
 async function getDevice(deviceId) {
-  return iruRequest('GET', `/v1/devices/${deviceId}`);
+  return iruRequest('GET', `/api/v1/devices/${deviceId}`);
 }
 
 // Get the current tags for a device
@@ -106,7 +101,7 @@ async function getDeviceTags(deviceId) {
 
 // Update a device's full tag array — Iru requires the complete list every time
 async function setDeviceTags(deviceId, tags) {
-  return iruRequest('PATCH', `/v1/devices/${deviceId}`, { tags });
+  return iruRequest('PATCH', `/api/v1/devices/${deviceId}`, { tags });
 }
 
 // Add a tag to a device, preserving all existing tags
@@ -155,7 +150,7 @@ async function removeLogCollectionTag(deviceId) {
 
 // Lock the device immediately via MDM.
 async function lockDevice(deviceId) {
-  await iruRequest('POST', `/v1/devices/${deviceId}/action/lock`, {});
+  await iruRequest('POST', `/api/v1/devices/${deviceId}/action/lock`, {});
 }
 
 module.exports = {
