@@ -32,6 +32,7 @@ Globals:
         IRU_ELEVATION_TAG: !Ref IruElevationTag
         IRU_LOG_COLLECTION_TAG: !Ref IruLogCollectionTag
         DYNAMODB_TABLE_NAME: !Ref RequestsTable
+        RISK_SCORES_TABLE_NAME: !Ref RiskScoresTable
         SELF_SERVICE_API_KEY: !Ref SelfServiceApiKey
         EMAIL_DOMAIN: !Ref EmailDomain
         # EVENTBRIDGE_ROLE_ARN is set per-function below to avoid circular dependency
@@ -112,6 +113,22 @@ Parameters:
     Type: String
     Default: '23'
     Description: Business hours end in UTC (0-23), e.g. 23 = 7pm ET.
+  DashboardApiKey:
+    Type: String
+    NoEcho: true
+    Description: API key for the IT admin risk dashboard (separate from SELF_SERVICE_API_KEY)
+  DashboardUrl:
+    Type: String
+    Default: ''
+    Description: Base URL of the hosted admin dashboard (e.g. https://yourorg.github.io/admin-dashboard). Included as a link in Slack approval messages.
+  DashboardCorsOrigin:
+    Type: String
+    Default: '*'
+    Description: CORS origin allowed for the dashboard API (e.g. https://yourorg.github.io)
+  BedrockModelId:
+    Type: String
+    Default: 'anthropic.claude-3-5-haiku-20241022-v1:0'
+    Description: Amazon Bedrock model ID to use for AI risk scoring
 
 # ---------------------------------------------------------------------------
 # Resources
@@ -137,6 +154,27 @@ Resources:
         Enabled: true
       PointInTimeRecoverySpecification:
         PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+
+  # -------------------------------------------------------------------------
+  # DynamoDB — AI risk scores (per-user, 48-hour TTL)
+  # -------------------------------------------------------------------------
+  RiskScoresTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: admin-access-risk-scores
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: username
+          AttributeType: S
+      KeySchema:
+        - AttributeName: username
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
       SSESpecification:
         SSEEnabled: true
         SSEType: KMS
@@ -179,10 +217,12 @@ Resources:
       Environment:
         Variables:
           PROCESS_SLACK_ACTION_FUNCTION_ARN: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:admin-access-processSlackAction'
+          COMPUTE_RISK_SCORE_FUNCTION_ARN: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:admin-access-computeRiskScore'
           ON_CALL_SLACK_USER_ID: !Ref OnCallSlackUserId
           ON_CALL_SLACK_USERNAME: !Ref OnCallSlackUsername
           BUSINESS_HOURS_UTC_START: !Ref BusinessHoursUtcStart
           BUSINESS_HOURS_UTC_END: !Ref BusinessHoursUtcEnd
+          DASHBOARD_URL: !Ref DashboardUrl
       Events:
         Api:
           Type: Api
@@ -192,10 +232,14 @@ Resources:
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref RequestsTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref RiskScoresTable
         - Statement:
             - Effect: Allow
               Action: lambda:InvokeFunction
-              Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:admin-access-processSlackAction'
+              Resource:
+                - !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:admin-access-processSlackAction'
+                - !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:admin-access-computeRiskScore'
 
   # -------------------------------------------------------------------------
   # Lambda: handleSlackAction  POST /slack/actions
@@ -435,6 +479,57 @@ Resources:
         - DynamoDBReadPolicy:
             TableName: !Ref RequestsTable
 
+  # -------------------------------------------------------------------------
+  # Lambda: computeRiskScore  (async, invoked by handleRequest)
+  # Calls Amazon Bedrock (Claude) to evaluate a user's risk profile
+  # -------------------------------------------------------------------------
+  ComputeRiskScoreFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: admin-access-computeRiskScore
+      Handler: computeRiskScore/index.handler
+      Description: Evaluates AI risk score for a user based on their admin access history
+      Timeout: 60
+      Environment:
+        Variables:
+          BEDROCK_MODEL_ID: !Ref BedrockModelId
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref RequestsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref RiskScoresTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+              Resource: !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/*'
+
+  # -------------------------------------------------------------------------
+  # Lambda: getRiskDashboard  GET /dashboard
+  # Returns request history and risk scores for the IT admin dashboard UI
+  # -------------------------------------------------------------------------
+  GetRiskDashboardFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: admin-access-getRiskDashboard
+      Handler: getRiskDashboard/index.handler
+      Description: Returns admin request history and AI risk scores for the IT dashboard
+      Environment:
+        Variables:
+          DASHBOARD_API_KEY: !Ref DashboardApiKey
+          DASHBOARD_CORS_ORIGIN: !Ref DashboardCorsOrigin
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /dashboard
+            Method: get
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref RequestsTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref RiskScoresTable
+
 # ---------------------------------------------------------------------------
 # Outputs
 # ---------------------------------------------------------------------------
@@ -466,6 +561,14 @@ Outputs:
   DynamoDBTableName:
     Description: DynamoDB table name
     Value: !Ref RequestsTable
+
+  RiskScoresTableName:
+    Description: DynamoDB risk scores table name
+    Value: !Ref RiskScoresTable
+
+  DashboardEndpoint:
+    Description: IT admin risk dashboard API endpoint
+    Value: !Sub 'https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/dashboard'
 
   SlashCommandEndpoint:
     Description: Slack slash command request URL — register at api.slack.com/apps under Slash Commands

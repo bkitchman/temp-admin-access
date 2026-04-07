@@ -4,6 +4,7 @@ const { DynamoDBDocumentClient, PutCommand, GetCommand, UpdateCommand, ScanComma
 const client = new DynamoDBClient({});
 const ddb = DynamoDBDocumentClient.from(client);
 const TABLE = process.env.DYNAMODB_TABLE_NAME;
+const RISK_TABLE = process.env.RISK_SCORES_TABLE_NAME;
 
 // Write a new request item
 async function putRequest(item) {
@@ -68,4 +69,47 @@ async function scanActiveRequests() {
   return result.Items || [];
 }
 
-module.exports = { putRequest, getRequest, updateRequest, scanActiveRequests };
+// Scan all requests made by a specific user (for risk scoring)
+async function scanRequestsByUser(username) {
+  const result = await ddb.send(new ScanCommand({
+    TableName: TABLE,
+    FilterExpression: '#u = :username',
+    ExpressionAttributeNames: { '#u': 'requestingUser' },
+    ExpressionAttributeValues: { ':username': username }
+  }));
+  return result.Items || [];
+}
+
+// ----- Risk scores table -----
+
+async function putRiskScore(item) {
+  await ddb.send(new PutCommand({
+    TableName: RISK_TABLE,
+    Item: item
+  }));
+}
+
+async function getRiskScore(username) {
+  const result = await ddb.send(new GetCommand({
+    TableName: RISK_TABLE,
+    Key: { username }
+  }));
+  return result.Item || null;
+}
+
+// Scan all risk scores — used by the dashboard to get the full user list
+async function scanAllRiskScores() {
+  const result = await ddb.send(new ScanCommand({ TableName: RISK_TABLE }));
+  return result.Items || [];
+}
+
+// Scan all completed requests — used by the dashboard to build per-user history
+async function scanAllRequests() {
+  const result = await ddb.send(new ScanCommand({ TableName: TABLE }));
+  return result.Items || [];
+}
+
+module.exports = {
+  putRequest, getRequest, updateRequest, scanActiveRequests,
+  scanRequestsByUser, putRiskScore, getRiskScore, scanAllRiskScores, scanAllRequests
+};
