@@ -357,8 +357,9 @@ ts() { date '+%Y-%m-%d %H:%M:%S'; }
 
 check_network() {
   local status
-  status=$(curl -s --max-time 5 -o /dev/null -w "%{http_code}" https://captive.apple.com 2>/dev/null)
-  [ "$status" = "200" ]
+  status=\$(curl -s --max-time 5 -o /dev/null -w "%{http_code}" https://captive.apple.com 2>/dev/null)
+  echo "\$(ts) \$LOG_TAG: network check → HTTP \$status"
+  [ "\$status" = "200" ]
 }
 
 revoke_admin() {
