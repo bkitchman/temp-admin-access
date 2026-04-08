@@ -5,7 +5,7 @@
 # need to be typed on the command line or stored in samconfig.toml.
 #
 # Required env vars:
-#   IRU_API_TOKEN          — Iru API token (from Settings → Access → API Token)
+#   IRU_WRITE_API_TOKEN    — Iru API token (from Settings → Access → API Token)
 #   SLACK_BOT_TOKEN        — Slack bot OAuth token
 #   SLACK_SIGNING_SECRET   — Slack app signing secret
 #   SELF_SERVICE_API_KEY   — Shared key stored in device keychain
@@ -29,7 +29,7 @@ cd "$(dirname "$0")"
 # Validate required env vars
 # ---------------------------------------------------------------------------
 MISSING=()
-for VAR in IRU_API_TOKEN SLACK_BOT_TOKEN SLACK_SIGNING_SECRET SELF_SERVICE_API_KEY DASHBOARD_API_KEY; do
+for VAR in IRU_WRITE_API_TOKEN SLACK_BOT_TOKEN SLACK_SIGNING_SECRET SELF_SERVICE_API_KEY DASHBOARD_API_KEY; do
   if [ -z "${!VAR:-}" ]; then
     MISSING+=("$VAR")
   fi
@@ -52,7 +52,7 @@ EMAIL_DOMAIN="${EMAIL_DOMAIN:-kitchman.com}"
 ON_CALL_SLACK_USER_ID="${ON_CALL_SLACK_USER_ID:-}"
 
 PARAMS=(
-  "IruApiToken=$IRU_API_TOKEN"
+  "IruApiToken=$IRU_WRITE_API_TOKEN"
   "IruBaseUrl=$IRU_BASE_URL"
   "SlackBotToken=$SLACK_BOT_TOKEN"
   "SlackSigningSecret=$SLACK_SIGNING_SECRET"

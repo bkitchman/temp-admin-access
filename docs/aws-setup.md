@@ -35,7 +35,7 @@ cd ..
 
 ```bash
 # Required
-export IRU_API_TOKEN="..."
+export IRU_WRITE_API_TOKEN="..."
 export SLACK_BOT_TOKEN="xoxb-..."
 export SLACK_SIGNING_SECRET="..."
 export SELF_SERVICE_API_KEY="$(openssl rand -hex 32)"
@@ -70,7 +70,7 @@ sam deploy --guided \
   --parameter-overrides \
     SlackBotToken="$SLACK_BOT_TOKEN" \
     SlackSigningSecret="$SLACK_SIGNING_SECRET" \
-    IruApiToken="$IRU_API_TOKEN" \
+    IruApiToken="$IRU_WRITE_API_TOKEN" \
     SelfServiceApiKey="$SELF_SERVICE_API_KEY" \
     SlackItChannelId="$SLACK_IT_CHANNEL_ID" \
     EmailDomain="$EMAIL_DOMAIN"
