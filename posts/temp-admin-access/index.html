@@ -705,7 +705,7 @@ HTTP_STATUS=$(curl -s -o "$ELEVATION_RESPONSE_FILE" -w "%{http_code}" \
       </div>
     </div>
 
-    <p class="fade-in" style="font-size:14px;color:var(--text-muted)">Bedrock is ~95% of cost because every session triggers a Claude Haiku risk re-score after the sudo log arrives. Scores are cached 48h per user, so repeat users reduce this further. See <a href="https://github.com/bkitchman/temp-admin-access/blob/master/docs/cost-estimate.html">full cost breakdown →</a></p>
+    <p class="fade-in" style="font-size:14px;color:var(--text-muted)">Bedrock is ~95% of cost because every session triggers a Claude Haiku 4.5 risk re-score after the sudo log arrives. Scores are cached 48h per user, so repeat users reduce this further. See <a href="https://github.com/bkitchman/temp-admin-access/blob/master/docs/cost-estimate.html">full cost breakdown →</a></p>
 
     <!-- VERSION HISTORY -->
     <h2 id="version-history">Version History</h2>
@@ -856,8 +856,8 @@ HTTP_STATUS=$(curl -s -o "$ELEVATION_RESPONSE_FILE" -w "%{http_code}" \
 
   // ── Cost chart ──
   (function() {
-    const BEDROCK_INPUT_PER_1K  = 0.00025;
-    const BEDROCK_OUTPUT_PER_1K = 0.00125;
+    const BEDROCK_INPUT_PER_1K  = 0.0008;   // Claude Haiku 4.5
+    const BEDROCK_OUTPUT_PER_1K = 0.004;    // Claude Haiku 4.5
     const BEDROCK_INPUT_TOKENS  = 2500;
     const BEDROCK_OUTPUT_TOKENS = 250;
     const API_GW_PER_MILLION    = 3.50;
