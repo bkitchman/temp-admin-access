@@ -2,7 +2,7 @@ const slack = require('../shared/slack');
 const dynamo = require('../shared/dynamo');
 const { isValidUUID } = require('../shared/validate');
 
-const STATUS_EMOJI = { pending: '⏳', approved: '🟢', expired: '🔒', denied: '❌' };
+const STATUS_EMOJI = { pending: '⏳', approved: '🟢', expired: '🔒', denied: '❌', expired_unanswered: '⏰' };
 
 // N6-02: Only allow designated IT admin Slack users to call this command.
 // Set SLACK_IT_ADMIN_IDS to a comma-separated list of Slack user IDs (e.g. U012ABC,U034DEF).

@@ -63,6 +63,16 @@ exports.handler = async (event) => {
   }
 };
 
+async function cancelNudgeSchedule(requestId) {
+  try {
+    await scheduler.deleteSchedule(`nudge-${requestId}`);
+  } catch (err) {
+    if (err.name !== 'ResourceNotFoundException') {
+      console.warn(`cancelNudgeSchedule: could not delete nudge schedule for ${requestId}:`, err.message);
+    }
+  }
+}
+
 async function handleDeny(request, requestId, actor) {
   // N3-02: conditional write — only deny if still pending (prevents race with approve)
   try {
@@ -82,6 +92,8 @@ async function handleDeny(request, requestId, actor) {
     }
     throw err;
   }
+
+  await cancelNudgeSchedule(requestId);
 
   const deniedDmNote = request.slackUserId
     ? `DM sent to <@${request.slackUserId}>.`
@@ -231,6 +243,8 @@ async function handleApprove(request, requestId, actor, approvedDuration) {
     }
     throw err;
   }
+
+  await cancelNudgeSchedule(requestId);
 
   // Assign the duration-specific elevation tag only after the state transition is committed.
   // The device-side approval monitor detects approval via /status polling and

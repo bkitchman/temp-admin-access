@@ -2,6 +2,7 @@ const { v4: uuidv4 } = require('uuid');
 const iru = require('../shared/iru');
 const slack = require('../shared/slack');
 const dynamo = require('../shared/dynamo');
+const scheduler = require('../shared/scheduler');
 const { isValidEmail } = require('../shared/validate');
 const { LambdaClient, InvokeCommand } = require('@aws-sdk/client-lambda');
 
@@ -189,6 +190,28 @@ exports.handler = async (event) => {
     const offHours = isOffHours();
     const onCallUserId = process.env.ON_CALL_SLACK_USER_ID;
     const processSlackActionArn = process.env.PROCESS_SLACK_ACTION_FUNCTION_ARN;
+
+    // Schedule the first pending-request nudge unless this request will be auto-approved.
+    // Skip when auto-deny is disabled (PENDING_AUTO_DENY_HOURS=0) to avoid orphaned schedules.
+    const autoDenyHours = parseInt(process.env.PENDING_AUTO_DENY_HOURS || '24', 10);
+    const nudgeArn = process.env.HANDLE_PENDING_NUDGE_FUNCTION_ARN;
+    const nudgeIntervalMinutes = parseInt(process.env.PENDING_NUDGE_INTERVAL_MINUTES || '10', 10);
+    const willAutoApprove = !!(onCallUserId && processSlackActionArn && offHours);
+    if (nudgeArn && autoDenyHours > 0 && !willAutoApprove) {
+      const firstNudgeAt = new Date(Date.now() + nudgeIntervalMinutes * 60 * 1000);
+      try {
+        await scheduler.createOneTimeSchedule({
+          name:            `nudge-${requestId}`,
+          invokeAt:        firstNudgeAt.toISOString(),
+          targetLambdaArn: nudgeArn,
+          payload:         { requestId, nudgeCount: 0, requestCreatedAt: new Date().toISOString() }
+        });
+        console.log(`handleRequest: scheduled first nudge for ${requestId} at ${firstNudgeAt.toISOString()}`);
+      } catch (err) {
+        console.warn(`handleRequest: could not schedule nudge for ${requestId}:`, err.message);
+      }
+    }
+
     if (onCallUserId && processSlackActionArn && offHours) {
       console.log(`handleRequest: off-hours — auto-approving ${requestId} via on-call ${onCallUserId}`);
       try {

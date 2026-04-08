@@ -100,6 +100,10 @@ sam deploy --guided \
 | `BusinessHoursUtcEnd` | — | `23` | Business hours end in UTC (0–23) |
 | `DashboardUrl` | — (v1.2.0+) | — | CloudFront URL — set after first deploy |
 | `BedrockModelId` | — (v1.2.0+) | `us.anthropic.claude-haiku-4-5-20251001-v1:0` | Bedrock cross-region inference profile for risk scoring |
+| `PendingNudgeIntervalMinutes` | — (v1.2.0+) | `10` | Minutes between Slack nudges during phase 1 |
+| `PendingNudgePhase1Hours` | — (v1.2.0+) | `1` | Hours before switching to hourly (phase 2) nudges |
+| `PendingNudgePhase2IntervalMinutes` | — (v1.2.0+) | `60` | Minutes between nudges in phase 2 |
+| `PendingAutoDenyHours` | — (v1.2.0+) | `24` | Hours after which unanswered requests are auto-denied as `expired_unanswered`. Set to `0` to disable. |
 
 ---
 
@@ -175,6 +179,7 @@ The SAM template creates:
 | `admin-access-receiveLog` | Lambda | Stores sudo log, triggers risk re-score |
 | `admin-access-computeRiskScore` | Lambda | Calls Bedrock to evaluate user risk *(v1.2.0+)* |
 | `admin-access-getRiskDashboard` | Lambda | Dashboard API endpoint *(v1.2.0+)* |
+| `admin-access-handlePendingNudge` | Lambda | Sends Slack nudges for pending requests; auto-denies after configured timeout *(v1.2.0+)* |
 
 ---
 

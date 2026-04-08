@@ -4030,14 +4030,14 @@ echo "Request submitted successfully"
 STATUS_ENDPOINT="https://1mng27frfb.execute-api.us-east-1.amazonaws.com/Prod/status"
 APPROVAL_MONITOR_SCRIPT="/usr/local/bin/iru-approval-monitor.sh"
 APPROVAL_MONITOR_PLIST="/Library/LaunchDaemons/com.kitchman.admin-approval-monitor.plist"
-APPROVAL_ATTEMPT_FILE="/var/tmp/iru-approval-attempt"
+APPROVAL_STATE_FILE="$META_DIR/approval-state.json"
 
 # Clean up any previous approval monitor before installing a fresh one.
 # N8-04: remove files before unloading from launchd — launchctl remove uses the label
 # (not the file path) so it works even after the file is gone. This prevents a window
 # where the plist exists on disk but the daemon has new content, if interrupted mid-cleanup.
 if [ -f "$APPROVAL_MONITOR_PLIST" ]; then
-  rm -f "$APPROVAL_MONITOR_PLIST" "$APPROVAL_MONITOR_SCRIPT" "$APPROVAL_ATTEMPT_FILE"
+  rm -f "$APPROVAL_MONITOR_PLIST" "$APPROVAL_MONITOR_SCRIPT" "$APPROVAL_STATE_FILE"
   launchctl remove com.kitchman.admin-approval-monitor 2>/dev/null
   echo "Previous approval monitor cleaned up"
 fi
@@ -4052,8 +4052,14 @@ USERNAME="$USERNAME_SAFE"
 STATUS_ENDPOINT="$STATUS_ENDPOINT"
 APPROVAL_MONITOR_PLIST="/Library/LaunchDaemons/com.kitchman.admin-approval-monitor.plist"
 APPROVAL_MONITOR_SCRIPT="/usr/local/bin/iru-approval-monitor.sh"
-ATTEMPT_FILE="/var/tmp/iru-approval-attempt"
-MAX_ATTEMPTS=15
+STATE_FILE="/var/root/.iru-elevation/approval-state.json"
+
+# Polling phase intervals (seconds)
+PHASE1_END_SECS=\$((15 * 60))     # first 15 min: poll every 20s (daemon default)
+PHASE2_END_SECS=\$((60 * 60))     # 15min–1hr:    poll every 5 min
+PHASE3_END_SECS=\$((24 * 60 * 60)) # 1hr–24hr:     poll every 60 min
+PHASE2_INTERVAL=300
+PHASE3_INTERVAL=3600
 
 IRU_RUN_LOCK="/var/run/iru-run.lock"
 
@@ -4061,7 +4067,7 @@ ts() { date '+%Y-%m-%d %H:%M:%S'; }
 
 cleanup() {
   launchctl unload "\$APPROVAL_MONITOR_PLIST" 2>/dev/null
-  rm -f "\$APPROVAL_MONITOR_PLIST" "\$APPROVAL_MONITOR_SCRIPT" "\$ATTEMPT_FILE"
+  rm -f "\$APPROVAL_MONITOR_PLIST" "\$APPROVAL_MONITOR_SCRIPT" "\$STATE_FILE"
 }
 
 # Acquire the iru run lock — waits up to 120s if another iru run is in progress.
@@ -4092,20 +4098,59 @@ release_iru_run_lock() {
   rm -f "\$IRU_RUN_LOCK"
 }
 
-# Increment and read attempt counter — persisted across daemon invocations
-ATTEMPT=\$(cat "\$ATTEMPT_FILE" 2>/dev/null || echo 0)
-ATTEMPT=\$((ATTEMPT + 1))
-echo "\$ATTEMPT" > "\$ATTEMPT_FILE"
-echo "\$(ts) approval-monitor: poll attempt \$ATTEMPT of \$MAX_ATTEMPTS"
+# Timestamp-based phase logic — persisted across daemon invocations via STATE_FILE.
+# The daemon always fires every 20s, but the script self-throttles based on elapsed time.
+NOW_EPOCH=\$(date +%s)
 
-if [ "\$ATTEMPT" -gt "\$MAX_ATTEMPTS" ]; then
-  echo "\$(ts) approval-monitor: timed out after \$MAX_ATTEMPTS attempts — request still pending"
-  /usr/local/bin/kandji display-alert --title "Admin Access Request" \
-    --message "Your request is still pending IT approval. You will receive a Slack DM when a decision is made — no need to re-submit." \
+# Read or initialise state — stored in root-owned directory (700) so non-root
+# users cannot manipulate startEpoch to bypass phase logic or expiry checks.
+if [ ! -f "\$STATE_FILE" ]; then
+  python3 -c "import json; json.dump({'startEpoch': \$NOW_EPOCH, 'lastPollEpoch': 0}, open('\$STATE_FILE', 'w'))"
+  chmod 600 "\$STATE_FILE"
+fi
+START_EPOCH=\$(python3 -c "import json; d=json.load(open('\$STATE_FILE')); print(d.get('startEpoch', \$NOW_EPOCH))" 2>/dev/null || echo "\$NOW_EPOCH")
+LAST_POLL_EPOCH=\$(python3 -c "import json; d=json.load(open('\$STATE_FILE')); print(d.get('lastPollEpoch', 0))" 2>/dev/null || echo "0")
+
+# Sanity-check: if startEpoch is in the future (corrupted state), reset to now
+if [ "\$START_EPOCH" -gt "\$NOW_EPOCH" ]; then
+  echo "\$(ts) approval-monitor: startEpoch in the future (\$START_EPOCH > \$NOW_EPOCH) — resetting state"
+  python3 -c "import json; json.dump({'startEpoch': \$NOW_EPOCH, 'lastPollEpoch': 0}, open('\$STATE_FILE', 'w'))"
+  chmod 600 "\$STATE_FILE"
+  START_EPOCH=\$NOW_EPOCH
+  LAST_POLL_EPOCH=0
+fi
+
+ELAPSED=\$((NOW_EPOCH - START_EPOCH))
+echo "\$(ts) approval-monitor: elapsed=\${ELAPSED}s"
+
+# 24-hour hard limit — backend will have auto-denied by now
+if [ "\$ELAPSED" -ge "\$PHASE3_END_SECS" ]; then
+  echo "\$(ts) approval-monitor: request pending for over 24 hours — expiring monitor"
+  /usr/local/bin/kandji display-alert --title "Admin Access Request Expired" \
+    --message "Your admin access request was automatically closed after 24 hours with no IT response. Please resubmit if you still need access." \
     --no-wait
   cleanup
   exit 0
 fi
+
+# Determine the minimum interval for the current phase and throttle if too soon
+if [ "\$ELAPSED" -lt "\$PHASE1_END_SECS" ]; then
+  POLL_INTERVAL=20     # phase 1 (0–15 min): daemon fires every 20s, always poll
+elif [ "\$ELAPSED" -lt "\$PHASE2_END_SECS" ]; then
+  POLL_INTERVAL=\$PHASE2_INTERVAL  # phase 2 (15 min–1 hr): poll every 5 min
+else
+  POLL_INTERVAL=\$PHASE3_INTERVAL  # phase 3 (1 hr–24 hr): poll every 60 min
+fi
+
+TIME_SINCE_LAST_POLL=\$((NOW_EPOCH - LAST_POLL_EPOCH))
+if [ "\$LAST_POLL_EPOCH" -gt 0 ] && [ "\$TIME_SINCE_LAST_POLL" -lt "\$POLL_INTERVAL" ]; then
+  echo "\$(ts) approval-monitor: too soon to poll (phase interval \${POLL_INTERVAL}s, last poll \${TIME_SINCE_LAST_POLL}s ago) — skipping"
+  exit 0
+fi
+
+# Record this poll attempt
+python3 -c "import json; d=json.load(open('\$STATE_FILE')); d['lastPollEpoch']=\$NOW_EPOCH; json.dump(d, open('\$STATE_FILE', 'w'))" 2>/dev/null || true
+echo "\$(ts) approval-monitor: polling (phase interval \${POLL_INTERVAL}s, elapsed \${ELAPSED}s)"
 
 # Fetch API key each cycle so key rotation takes effect without reinstalling the daemon
 API_KEY=\$(security find-generic-password -a "iru-temp-admin" -s "iru-temp-admin-api" -w /Library/Keychains/System.keychain 2>/dev/null)
@@ -4172,6 +4217,15 @@ case "\$HTTP_CODE" in
       echo "\$(ts) approval-monitor: denied — cleaning up"
       /usr/local/bin/kandji display-alert --title "Admin Access Denied" \
         --message "Your temporary admin access request was denied by IT. Please reach out to IT if you have questions."
+      cleanup
+      exit 0
+
+    elif [ "\$CURRENT_STATUS" = "expired_unanswered" ]; then
+      rm -f "\$STATUS_TMPFILE"
+      echo "\$(ts) approval-monitor: expired unanswered — cleaning up"
+      /usr/local/bin/kandji display-alert --title "Admin Access Request Expired" \
+        --message "Your admin access request was automatically closed after 24 hours with no IT response. Please resubmit if you still need access." \
+        --no-wait
       cleanup
       exit 0
     fi

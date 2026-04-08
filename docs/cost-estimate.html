@@ -91,8 +91,8 @@
 <div class="assumptions">
   <h3>Model Assumptions</h3>
   <ul>
-    <li>~80% approval rate (most requests approved)</li>
-    <li>8 Lambda invocations per request lifecycle</li>
+    <li>~80% approval rate; ~20% expire unanswered after 24h (default)</li>
+    <li>~13 Lambda invocations per request lifecycle (8 base + ~5 nudge/auto-deny on avg)</li>
     <li>Lambda free tier: 1M invocations + 400K GB-seconds/month (permanent)</li>
     <li>10 API Gateway calls per request (submit, approve, start, status polls, log, dashboard)</li>
     <li>7 DynamoDB writes + 5 reads per request</li>
@@ -100,11 +100,13 @@
     <li>Bedrock: ~2,500 input tokens + ~250 output tokens per call</li>
     <li>Claude Haiku 4.5 pricing: $0.0008/1K input, $0.004/1K output</li>
     <li>Risk scores cached 48h per user — repeat users reduce Bedrock calls</li>
-    <li>EventBridge: 2 schedules per approved request (warning + expiry)</li>
+    <li>EventBridge: ~7 schedules per request (2 approved warning/expiry + ~5 nudge avg)</li>
+    <li>Nudge schedules: every 10min for 1hr → hourly until 24hr auto-deny (default settings)</li>
+    <li>Approved requests: ~2 nudges before IT acts; unanswered: up to 29 nudges over 24h</li>
     <li>CloudFront + S3 within free tier at this scale</li>
     <li>Does not include: KMS ($0 within free tier), CloudWatch Logs (free tier), Route 53, WorkMail (not this project)</li>
   </ul>
-  <p class="note">This estimate uses account-wide AWS pricing as of April 2026. Actual costs will vary based on session duration, unique users (Bedrock caching), and IT dashboard usage. Enable cost allocation tags (Project=temp-admin-access) in AWS Billing to track actual spend once tags propagate (~24h).</p>
+  <p class="note">This estimate uses account-wide AWS pricing as of April 2026. At 100–1,000 req/month the nudge system adds ~5 Lambda invocations and ~5 EventBridge schedules per request on average — both remain within permanent free tiers at this volume. Actual costs will vary based on session duration, unique users (Bedrock caching), and IT response time. Enable cost allocation tags (Project=temp-admin-access) in AWS Billing to track actual spend once tags propagate (~24h).</p>
 </div>
 
 <script>
@@ -123,11 +125,11 @@
   const LAMBDA_PER_GB_SEC     = 0.0000166667;
   const LAMBDA_FREE_INVOKE    = 1000000;   // permanent free tier
   const LAMBDA_FREE_GB_SEC    = 400000;    // permanent free tier
-  const LAMBDA_INVOKES_PER    = 8;         // per request
+  const LAMBDA_INVOKES_PER    = 13;        // per request (8 base + ~5 nudge/auto-deny avg)
   const LAMBDA_AVG_DURATION   = 1.5;       // seconds avg
   const LAMBDA_MEMORY_GB      = 0.25;      // 256MB
   const EB_PER_MILLION        = 1.00;      // EventBridge scheduler
-  const EB_SCHEDULES_PER_REQ  = 2;         // warning + expiration
+  const EB_SCHEDULES_PER_REQ  = 7;         // 2 approved (warning+expiry) + ~5 nudge avg
   const APPROVAL_RATE         = 0.80;      // 80% of requests approved
 
   function calcCosts(requests) {

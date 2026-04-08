@@ -8,7 +8,8 @@ const ROLE_ARN = process.env.EVENTBRIDGE_ROLE_ARN;
 // Returns the schedule ARN.
 const ALLOWED_TARGET_ARNS = new Set([
   process.env.SEND_WARNING_FUNCTION_ARN,
-  process.env.HANDLE_EXPIRATION_FUNCTION_ARN
+  process.env.HANDLE_EXPIRATION_FUNCTION_ARN,
+  process.env.HANDLE_PENDING_NUDGE_FUNCTION_ARN
 ].filter(Boolean));
 
 async function createOneTimeSchedule({ name, invokeAt, targetLambdaArn, payload }) {

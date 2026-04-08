@@ -103,6 +103,7 @@
     .status-denied { background: rgba(239,68,68,.12); color: var(--critical); }
     .status-revoked_early { background: rgba(249,115,22,.12); color: var(--high); }
     .status-network_loss { background: rgba(251,191,36,.12); color: var(--medium); }
+    .status-expired_unanswered { background: rgba(148,163,184,.12); color: var(--text-muted); }
     .no-requests { color: var(--text-muted); font-size: 13px; padding: 14px 0; }
     .log-toggle { background: none; border: none; color: var(--accent); font-size: 11px; cursor: pointer; padding: 0; text-decoration: underline; }
     .sudo-log-row td { padding: 0 10px 10px; }
@@ -450,11 +451,13 @@
     // Stats strip
     const approved = requests.filter(r => ['approved', 'expired'].includes(r.status)).length;
     const denied = requests.filter(r => r.status === 'denied').length;
+    const expiredUnanswered = requests.filter(r => r.status === 'expired_unanswered').length;
     const networkRev = requests.filter(r => r.revokedByNetworkLoss).length;
     html += `<div class="detail-grid">
       <div class="detail-stat"><div class="ds-val">${requests.length}</div><div class="ds-lbl">Total requests</div></div>
       <div class="detail-stat"><div class="ds-val" style="color:var(--low)">${approved}</div><div class="ds-lbl">Approved</div></div>
       <div class="detail-stat"><div class="ds-val" style="color:var(--critical)">${denied}</div><div class="ds-lbl">Denied</div></div>
+      ${expiredUnanswered > 0 ? `<div class="detail-stat"><div class="ds-val" style="color:var(--text-muted)">${expiredUnanswered}</div><div class="ds-lbl">No IT response</div></div>` : ''}
     </div>`;
 
     // Request history table
@@ -520,7 +523,7 @@
     if (r.lockedByIT) return '🔒 Device Locked';
     if (r.revokedByNetworkLoss) return '⚠️ Network Loss';
     if (r.revokedEarly) return '⛔ Revoked Early';
-    return { approved: '✅ Active', expired: '🔒 Expired', pending: '⏳ Pending', denied: '❌ Denied' }[r.status] || r.status;
+    return { approved: '✅ Active', expired: '🔒 Expired', pending: '⏳ Pending', denied: '❌ Denied', expired_unanswered: '⏰ Expired (no IT response)' }[r.status] || r.status;
   }
 
   function relativeTime(iso) {

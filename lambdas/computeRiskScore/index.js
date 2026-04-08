@@ -15,7 +15,9 @@ exports.handler = async (event) => {
 
   try {
     console.log(`computeRiskScore: evaluating risk for user "${username}"`);
-    const requests = await dynamo.scanRequestsByUser(username);
+    const allRequests = await dynamo.scanRequestsByUser(username);
+    // Exclude auto-expired requests — no IT response is not a behavioural signal
+    const requests = allRequests.filter(r => r.status !== 'expired_unanswered');
     const score = await evaluateRisk(username, requests);
 
     const now = new Date().toISOString();
