@@ -705,7 +705,7 @@ HTTP_STATUS=$(curl -s -o "$ELEVATION_RESPONSE_FILE" -w "%{http_code}" \
       </div>
     </div>
 
-    <p class="fade-in" style="font-size:14px;color:var(--text-muted)">Bedrock is ~95% of cost because every session triggers a Claude Sonnet 4 risk re-score after the sudo log arrives. Scores are cached 48h per user, so repeat users reduce this further. See <a href="https://github.com/bkitchman/temp-admin-access/blob/master/docs/cost-estimate.html">full cost breakdown →</a></p>
+    <p class="fade-in" style="font-size:14px;color:var(--text-muted)">Bedrock is ~95% of cost because every session triggers a Claude Haiku 4.5 risk re-score after the sudo log arrives. Scores are cached 48h per user, so repeat users reduce this further. See <a href="https://github.com/bkitchman/temp-admin-access/blob/master/docs/cost-estimate.html">full cost breakdown →</a></p>
 
     <!-- VERSION HISTORY -->
     <h2 id="version-history">Version History</h2>
@@ -722,7 +722,7 @@ HTTP_STATUS=$(curl -s -o "$ELEVATION_RESPONSE_FILE" -w "%{http_code}" \
         <ul style="margin:0;padding-left:20px;font-size:13px;line-height:1.7">
           <li><strong>IT risk dashboard</strong> hosted on S3 + CloudFront — per-user request history, AI risk scores (Low/Medium/High/Critical), expandable sudo logs</li>
           <li><strong>Single-use Slack links</strong> — every approval message includes a one-click dashboard link with a UUID session token; no API key entry required</li>
-          <li><strong>AI-powered risk scoring</strong> — Amazon Bedrock (Claude Haiku) evaluates actual sudo commands, not just request metadata; re-scored after each session log arrives</li>
+          <li><strong>AI-powered risk scoring</strong> — Amazon Bedrock (Claude Haiku 4.5) evaluates actual sudo commands, not just request metadata; re-scored after each session log arrives. Haiku 4.5 was chosen over larger models for its low latency, sub-cent per-call cost, and because risk scoring is a structured classification task — not a reasoning-heavy one. The full sudo command list and session history fit comfortably in its context window.</li>
           <li><strong>Sudo log stored in DynamoDB</strong> — viewable inline in the dashboard; normalized to <code>HH:MM:SS  &lt;command&gt;</code> with PrivilegesCLI revocation entries stripped</li>
           <li><strong>Security fixes</strong> — 14 issues resolved across two full audits: race condition in schedule creation, Bedrock IAM scope, CORS wildcard, XSS escaping, token session window, HTTPS enforcement, and more</li>
         </ul>
@@ -856,8 +856,8 @@ HTTP_STATUS=$(curl -s -o "$ELEVATION_RESPONSE_FILE" -w "%{http_code}" \
 
   // ── Cost chart ──
   (function() {
-    const BEDROCK_INPUT_PER_1K  = 0.003;    // Claude Sonnet 4
-    const BEDROCK_OUTPUT_PER_1K = 0.015;    // Claude Sonnet 4
+    const BEDROCK_INPUT_PER_1K  = 0.0008;   // Claude Haiku 4.5
+    const BEDROCK_OUTPUT_PER_1K = 0.004;    // Claude Haiku 4.5
     const BEDROCK_INPUT_TOKENS  = 2500;
     const BEDROCK_OUTPUT_TOKENS = 250;
     const API_GW_PER_MILLION    = 3.50;

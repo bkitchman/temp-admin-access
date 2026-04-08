@@ -126,7 +126,7 @@ Parameters:
     Description: CloudFront URL of the dashboard (leave blank on first deploy; set after stack creates the distribution)
   BedrockModelId:
     Type: String
-    Default: 'us.anthropic.claude-sonnet-4-20250514-v1:0'
+    Default: 'us.anthropic.claude-haiku-4-5-20251001-v1:0'
     Description: Amazon Bedrock cross-region inference profile ID to use for AI risk scoring
 
 # ---------------------------------------------------------------------------
@@ -616,11 +616,15 @@ Resources:
               Action:
                 - bedrock:InvokeModel
               Resource:
-                # Cross-region inference profile (us.*) — required for on-demand throughput
-                - !Sub 'arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.anthropic.claude-sonnet-4-20250514-v1:0'
-                # Underlying foundation model — wildcard region required because the inference
-                # profile dynamically routes to any US region (us-east-1, us-east-2, us-west-2)
-                - 'arn:aws:bedrock:*::foundation-model/anthropic.claude-sonnet-4-20250514-v1:0'
+                # Cross-region inference profile — covers both Sonnet 4 and Haiku 4.5 profiles
+                - !Sub 'arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.anthropic.*'
+                # Underlying foundation models across all US regions
+                - 'arn:aws:bedrock:*::foundation-model/anthropic.*'
+            - Effect: Allow
+              Action:
+                - aws-marketplace:ViewSubscriptions
+                - aws-marketplace:Subscribe
+              Resource: '*'
 
   # -------------------------------------------------------------------------
   # Lambda: getRiskDashboard  GET /dashboard

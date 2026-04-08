@@ -98,7 +98,7 @@
     <li>7 DynamoDB writes + 5 reads per request</li>
     <li>1 Bedrock call per request after log arrives (risk re-score)</li>
     <li>Bedrock: ~2,500 input tokens + ~250 output tokens per call</li>
-    <li>Claude Sonnet 4 pricing: $0.003/1K input, $0.015/1K output</li>
+    <li>Claude Haiku 4.5 pricing: $0.0008/1K input, $0.004/1K output</li>
     <li>Risk scores cached 48h per user — repeat users reduce Bedrock calls</li>
     <li>EventBridge: 2 schedules per approved request (warning + expiry)</li>
     <li>CloudFront + S3 within free tier at this scale</li>
@@ -109,8 +109,8 @@
 
 <script>
   // Pricing constants (April 2026)
-  const BEDROCK_INPUT_PER_1K  = 0.003;     // Claude Sonnet 4 input
-  const BEDROCK_OUTPUT_PER_1K = 0.015;     // Claude Sonnet 4 output
+  const BEDROCK_INPUT_PER_1K  = 0.0008;    // Claude Haiku 4.5 input
+  const BEDROCK_OUTPUT_PER_1K = 0.004;     // Claude Haiku 4.5 output
   const BEDROCK_INPUT_TOKENS  = 2500;      // per call
   const BEDROCK_OUTPUT_TOKENS = 250;       // per call
   const API_GW_PER_MILLION    = 3.50;      // REST API
