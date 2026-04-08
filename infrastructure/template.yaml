@@ -22,6 +22,8 @@ Globals:
     # All Lambdas share a single CodeUri so the shared/ folder is available
     # at runtime via relative require('../shared/...')
     CodeUri: ../lambdas/
+    Tags:
+      Project: temp-admin-access
     Environment:
       Variables:
         SLACK_BOT_TOKEN: !Ref SlackBotToken
@@ -154,6 +156,9 @@ Resources:
       SSESpecification:
         SSEEnabled: true
         SSEType: KMS
+      Tags:
+        - Key: Project
+          Value: temp-admin-access
 
   # -------------------------------------------------------------------------
   # DynamoDB — AI risk scores (per-user, 48-hour TTL)
@@ -175,6 +180,9 @@ Resources:
       SSESpecification:
         SSEEnabled: true
         SSEType: KMS
+      Tags:
+        - Key: Project
+          Value: temp-admin-access
 
   # -------------------------------------------------------------------------
   # DynamoDB — single-use dashboard access tokens (7-day TTL)
@@ -196,6 +204,9 @@ Resources:
       SSESpecification:
         SSEEnabled: true
         SSEType: KMS
+      Tags:
+        - Key: Project
+          Value: temp-admin-access
 
   # -------------------------------------------------------------------------
   # S3 bucket — private storage for the dashboard static files
@@ -209,6 +220,9 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
+      Tags:
+        - Key: Project
+          Value: temp-admin-access
 
   DashboardBucketPolicy:
     Type: AWS::S3::BucketPolicy
@@ -259,6 +273,9 @@ Resources:
             S3OriginConfig:
               OriginAccessIdentity: ''
             OriginAccessControlId: !GetAtt DashboardOAC.Id
+      Tags:
+        - Key: Project
+          Value: temp-admin-access
 
   # -------------------------------------------------------------------------
   # IAM Role — EventBridge Scheduler → Lambda invocation
@@ -275,6 +292,9 @@ Resources:
             Principal:
               Service: scheduler.amazonaws.com
             Action: sts:AssumeRole
+      Tags:
+        - Key: Project
+          Value: temp-admin-access
       Policies:
         - PolicyName: InvokeAdminAccessLambdas
           PolicyDocument:
