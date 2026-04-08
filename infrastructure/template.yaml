@@ -142,12 +142,12 @@ Parameters:
     Type: String
     Default: '60'
     Description: Nudge interval (minutes) during phase 2 — after phase 1 ends until auto-deny
-    AllowedValues: ['30','60','120']
+    AllowedValues: ['5','30','60','120']
   PendingAutoDenyHours:
     Type: String
     Default: '24'
     Description: Hours after which an unanswered pending request is auto-denied as expired_unanswered. Set to 0 to disable.
-    AllowedValues: ['0','12','24','48','72']
+    AllowedValues: ['0','1','12','24','48','72']
 
 # ---------------------------------------------------------------------------
 # Resources
