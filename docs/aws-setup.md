@@ -13,7 +13,7 @@
 - [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html) configured with credentials
 - [AWS SAM CLI](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/install-sam-cli.html) (`brew install aws-sam-cli`)
 - Node.js 20.x
-- Amazon Bedrock enabled in your AWS account with access to `anthropic.claude-3-5-haiku-20241022-v1:0` *(v1.2.0+ only)*
+- Amazon Bedrock enabled in your AWS account with access to `us.anthropic.claude-haiku-4-5-20251001-v1:0` *(v1.2.0+ only)*
 
 ---
 
@@ -99,7 +99,7 @@ sam deploy --guided \
 | `BusinessHoursUtcStart` | — | `13` | Business hours start in UTC (0–23) |
 | `BusinessHoursUtcEnd` | — | `23` | Business hours end in UTC (0–23) |
 | `DashboardUrl` | — (v1.2.0+) | — | CloudFront URL — set after first deploy |
-| `BedrockModelId` | — (v1.2.0+) | `anthropic.claude-3-5-haiku-20241022-v1:0` | Bedrock model for risk scoring |
+| `BedrockModelId` | — (v1.2.0+) | `us.anthropic.claude-haiku-4-5-20251001-v1:0` | Bedrock cross-region inference profile for risk scoring |
 
 ---
 

@@ -65,6 +65,7 @@ PARAMS=(
   "IruElevationTag15Min=temp-admin-elevation-15min"
   "IruElevationTag30Min=temp-admin-elevation-30min"
   "IruLogCollectionTag=temp-admin-log-collection"
+  "BedrockModelId=us.anthropic.claude-haiku-4-5-20251001-v1:0"
 )
 
 if [ -n "$ON_CALL_SLACK_USER_ID" ]; then

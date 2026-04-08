@@ -144,17 +144,27 @@ function scoreToLevel(score) {
 }
 
 // Extract the command strings from sudo log lines.
-// Log format: "... COMMAND=/usr/bin/git status" or "... COMMAND=/bin/bash -c '...'"
+// Handles two formats:
+//   Raw sudo log:   "... COMMAND=/usr/bin/git status"
+//   Normalized log: "14:32:15  /usr/bin/git status"  (stored by receiveLog)
 // Returns an array of up to 100 command strings (capped to limit prompt size).
 function extractCommands(logContent) {
   if (!logContent) return [];
   const commands = [];
   for (const line of logContent.split('\n')) {
-    const match = line.match(/COMMAND=(.+)$/);
-    if (match) {
-      // Strip full path prefix from the binary for readability, keep args
-      const cmd = match[1].trim();
-      commands.push(cmd);
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    // Raw format: COMMAND= prefix still present
+    const rawMatch = trimmed.match(/COMMAND=(.+)$/);
+    if (rawMatch) {
+      commands.push(rawMatch[1].trim());
+      if (commands.length >= 100) break;
+      continue;
+    }
+    // Normalized format: "HH:MM:SS  <command>" (two spaces after time)
+    const normMatch = trimmed.match(/^\d{2}:\d{2}:\d{2}\s{2}(.+)$/);
+    if (normMatch) {
+      commands.push(normMatch[1].trim());
       if (commands.length >= 100) break;
     }
   }

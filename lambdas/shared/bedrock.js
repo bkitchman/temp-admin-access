@@ -2,7 +2,7 @@
 const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
 
 const client = new BedrockRuntimeClient({ region: process.env.AWS_REGION || 'us-east-1' });
-const MODEL_ID = process.env.BEDROCK_MODEL_ID || 'anthropic.claude-3-5-haiku-20241022-v1:0';
+const MODEL_ID = process.env.BEDROCK_MODEL_ID || 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
 
 // Send a user prompt to Claude via Bedrock and return the parsed JSON response.
 // The prompt must instruct Claude to respond with raw JSON only.

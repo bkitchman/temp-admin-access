@@ -126,8 +126,8 @@ Parameters:
     Description: CloudFront URL of the dashboard (leave blank on first deploy; set after stack creates the distribution)
   BedrockModelId:
     Type: String
-    Default: 'anthropic.claude-3-5-haiku-20241022-v1:0'
-    Description: Amazon Bedrock model ID to use for AI risk scoring
+    Default: 'us.anthropic.claude-haiku-4-5-20251001-v1:0'
+    Description: Amazon Bedrock cross-region inference profile ID to use for AI risk scoring
 
 # ---------------------------------------------------------------------------
 # Resources
@@ -605,6 +605,7 @@ Resources:
       Environment:
         Variables:
           BEDROCK_MODEL_ID: !Ref BedrockModelId
+          RISK_SCORES_TABLE_NAME: admin-access-risk-scores
       Policies:
         - DynamoDBReadPolicy:
             TableName: !Ref RequestsTable
@@ -614,7 +615,12 @@ Resources:
             - Effect: Allow
               Action:
                 - bedrock:InvokeModel
-              Resource: !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/${BedrockModelId}'
+              Resource:
+                # Cross-region inference profile (us.*) — required for on-demand throughput
+                - !Sub 'arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0'
+                # Underlying foundation model — wildcard region required because the inference
+                # profile dynamically routes to any US region (us-east-1, us-east-2, us-west-2)
+                - 'arn:aws:bedrock:*::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0'
 
   # -------------------------------------------------------------------------
   # Lambda: getRiskDashboard  GET /dashboard

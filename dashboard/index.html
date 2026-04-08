@@ -421,13 +421,29 @@
 
     let html = '';
 
-    // Risk score breakdown
+    // Risk score — prominent header block
     if (score) {
-      html += `<div class="risk-summary">
-        <h4>AI Risk Assessment — ${riskBadge(score.level, score.score)} (${score.score}/100)</h4>
-        ${score.summary ? `<p>${esc(score.summary)}</p>` : ''}
-        ${score.keyFactors?.length ? `<ul class="key-factors">${score.keyFactors.map(f => `<li>${esc(f)}</li>`).join('')}</ul>` : ''}
-        <p style="font-size:11px;color:var(--text-muted);margin-top:8px">Last evaluated ${score.lastEvaluatedAt ? relativeTime(score.lastEvaluatedAt) : 'unknown'} · ${score.requestCount ?? '?'} requests analyzed</p>
+      const scoreColor = riskColor(score.level);
+      html += `<div class="risk-summary" style="display:flex;gap:16px;align-items:flex-start">
+        <div style="text-align:center;flex-shrink:0;background:var(--surface);border:2px solid ${scoreColor};border-radius:10px;padding:12px 18px;min-width:80px">
+          <div style="font-size:32px;font-weight:800;color:${scoreColor};line-height:1">${score.score}</div>
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-top:4px">/ 100</div>
+          <div style="margin-top:8px">${riskBadge(score.level, '')}</div>
+        </div>
+        <div style="flex:1;min-width:0">
+          <h4 style="margin-bottom:6px">AI Risk Assessment</h4>
+          ${score.summary ? `<p style="font-size:13px;margin-bottom:8px">${esc(score.summary)}</p>` : ''}
+          ${score.keyFactors?.length ? `<ul class="key-factors">${score.keyFactors.map(f => `<li>${esc(f)}</li>`).join('')}</ul>` : ''}
+          <p style="font-size:11px;color:var(--text-muted);margin-top:8px">Last evaluated ${score.lastEvaluatedAt ? relativeTime(score.lastEvaluatedAt) : 'unknown'} · ${score.requestCount ?? '?'} requests analyzed</p>
+        </div>
+      </div>`;
+    } else {
+      html += `<div class="risk-summary" style="display:flex;align-items:center;gap:12px;color:var(--text-muted)">
+        <div style="font-size:28px;font-weight:800;opacity:.3">—</div>
+        <div>
+          <div style="font-size:13px;font-weight:600">Not yet scored</div>
+          <div style="font-size:12px">Risk score is computed after the first session log is received.</div>
+        </div>
       </div>`;
     }
 
