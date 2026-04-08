@@ -104,6 +104,7 @@
     .status-revoked_early { background: rgba(249,115,22,.12); color: var(--high); }
     .status-network_loss { background: rgba(251,191,36,.12); color: var(--medium); }
     .status-expired_unanswered { background: rgba(148,163,184,.12); color: var(--text-muted); }
+    .status-completed_by_user { background: rgba(52,211,153,.08); color: var(--low); }
     .no-requests { color: var(--text-muted); font-size: 13px; padding: 14px 0; }
     .log-toggle { background: none; border: none; color: var(--accent); font-size: 11px; cursor: pointer; padding: 0; text-decoration: underline; }
     .sudo-log-row td { padding: 0 10px 10px; }
@@ -523,7 +524,7 @@
     if (r.lockedByIT) return '🔒 Device Locked';
     if (r.revokedByNetworkLoss) return '⚠️ Network Loss';
     if (r.revokedEarly) return '⛔ Revoked Early';
-    return { approved: '✅ Active', expired: '🔒 Expired', pending: '⏳ Pending', denied: '❌ Denied', expired_unanswered: '⏰ Expired (no IT response)' }[r.status] || r.status;
+    return { approved: '✅ Active', expired: '🔒 Expired', pending: '⏳ Pending', denied: '❌ Denied', expired_unanswered: '⏰ Expired (no IT response)', completed_by_user: '✅ Ended by user' }[r.status] || r.status;
   }
 
   function relativeTime(iso) {

@@ -4228,6 +4228,12 @@ case "\$HTTP_CODE" in
         --no-wait
       cleanup
       exit 0
+
+    elif [ "\$CURRENT_STATUS" = "completed_by_user" ]; then
+      rm -f "\$STATUS_TMPFILE"
+      echo "\$(ts) approval-monitor: session ended by user — cleaning up"
+      cleanup
+      exit 0
     fi
     ;;
   401|403)
