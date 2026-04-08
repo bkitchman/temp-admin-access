@@ -20,10 +20,39 @@
 # Usage:
 #   ./deploy.sh            # build + deploy (no confirmation prompt)
 #   ./deploy.sh --confirm  # build + deploy (pause to review changeset)
+#   ./deploy.sh --testing  # deploy with accelerated nudge/auto-deny timers for testing
+#                          #   PendingNudgeIntervalMinutes=5  (every 5 min instead of 10)
+#                          #   PendingNudgePhase1Hours=1      (unchanged)
+#                          #   PendingNudgePhase2IntervalMinutes=5  (5 min instead of 60)
+#                          #   PendingAutoDenyHours=1         (1 hr instead of 24)
+#   ./deploy.sh --testing --confirm  # both flags together
 
 set -euo pipefail
 
 cd "$(dirname "$0")"
+
+# ---------------------------------------------------------------------------
+# Parse flags
+# ---------------------------------------------------------------------------
+CONFIRM=false
+TESTING=false
+for arg in "$@"; do
+  case "$arg" in
+    --confirm) CONFIRM=true ;;
+    --testing) TESTING=true ;;
+    *) echo "ERROR: Unknown flag: $arg"; exit 1 ;;
+  esac
+done
+
+if [ "$TESTING" = true ]; then
+  echo ""
+  echo "  ⚠️  TESTING MODE — accelerated timers active:"
+  echo "       PendingNudgeIntervalMinutes  = 5   (prod: 10)"
+  echo "       PendingNudgePhase2IntervalMinutes = 5   (prod: 60)"
+  echo "       PendingAutoDenyHours         = 1   (prod: 24)"
+  echo "  Run ./deploy.sh (without --testing) to restore production values."
+  echo ""
+fi
 
 # ---------------------------------------------------------------------------
 # Validate required env vars
@@ -77,6 +106,16 @@ if [ -n "${DASHBOARD_URL:-}" ]; then
   PARAMS+=("DashboardUrl=$DASHBOARD_URL")
 fi
 
+# Testing overrides — accelerated timers to make time-based features testable in ~1 hour
+if [ "$TESTING" = true ]; then
+  PARAMS+=(
+    "PendingNudgeIntervalMinutes=5"
+    "PendingNudgePhase1Hours=1"
+    "PendingNudgePhase2IntervalMinutes=5"
+    "PendingAutoDenyHours=1"
+  )
+fi
+
 # ---------------------------------------------------------------------------
 # Clean, build, deploy
 # ---------------------------------------------------------------------------
@@ -92,7 +131,7 @@ sam build
 echo "==> Deploying with parameters from environment..."
 STACK_NAME="${STACK_NAME:-temp-admin-access}"
 
-if [ "${1:-}" = "--confirm" ]; then
+if [ "$CONFIRM" = true ]; then
   sam deploy --stack-name "$STACK_NAME" --parameter-overrides "${PARAMS[@]}"
 else
   sam deploy --stack-name "$STACK_NAME" --no-confirm-changeset --parameter-overrides "${PARAMS[@]}"
