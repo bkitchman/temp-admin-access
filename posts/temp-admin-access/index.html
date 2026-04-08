@@ -441,6 +441,17 @@
         <img src="img/screenshot-network-revocation.jpg" alt="Slack thread showing access revoked by IT and sudo log collected">
         <div class="screenshot-caption">On expiration or revocation, the Slack thread shows the final status and the collected sudo log is attached inline. Every <code>sudo</code> command the user ran during the session is visible to IT without leaving Slack.</div>
       </div>
+      <div class="flow-step">
+        <div class="step-num">7</div>
+        <div class="step-text">
+          <strong>IT reviews per-user risk scores on the AI dashboard (v1.2.0)</strong>
+          <span>Every session log is scored by Claude Haiku 4.5 via Amazon Bedrock — evaluating actual sudo commands, not just metadata. Scores are cached 48h per user. The dashboard is served over CloudFront and accessible directly from each Slack approval message via a 30-minute session token.</span>
+        </div>
+      </div>
+      <div class="screenshot-wrap fade-in">
+        <img src="img/screenshot-dashboard.png" alt="IT admin risk dashboard showing per-user AI risk scores, request history, and sudo log detail">
+        <div class="screenshot-caption">The IT risk dashboard — per-user AI risk score (0–100), behavioral key factors, full request history with sudo log viewer, and stats including approvals, denials, and unanswered requests. Accessible directly from the Slack approval thread.</div>
+      </div>
     </div>
 
     <!-- ARCHITECTURE -->
