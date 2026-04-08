@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>temp-admin-access — Monthly Cost Estimate</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f7; color: #1d1d1f; padding: 40px 24px; }
+    h1 { font-size: 24px; font-weight: 700; margin-bottom: 4px; }
+    .subtitle { color: #6e6e73; font-size: 14px; margin-bottom: 32px; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 32px; }
+    .card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    .card-label { font-size: 12px; color: #6e6e73; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+    .card-value { font-size: 28px; font-weight: 700; }
+    .card-sub { font-size: 12px; color: #6e6e73; margin-top: 4px; }
+    .card.highlight .card-value { color: #0071e3; }
+    .chart-container { background: white; border-radius: 12px; padding: 28px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); margin-bottom: 32px; }
+    .chart-title { font-size: 16px; font-weight: 600; margin-bottom: 20px; }
+    .chart-wrap { position: relative; height: 320px; }
+    .table-container { background: white; border-radius: 12px; padding: 28px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); margin-bottom: 32px; overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { text-align: left; padding: 10px 12px; border-bottom: 2px solid #e5e5e5; font-weight: 600; color: #6e6e73; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+    td { padding: 10px 12px; border-bottom: 1px solid #f0f0f0; }
+    tr:last-child td { border-bottom: none; }
+    .service-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+    .assumptions { background: white; border-radius: 12px; padding: 28px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    .assumptions h3 { font-size: 14px; font-weight: 600; margin-bottom: 12px; }
+    .assumptions ul { list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 6px; }
+    .assumptions li { font-size: 13px; color: #444; padding-left: 16px; position: relative; }
+    .assumptions li::before { content: '•'; position: absolute; left: 0; color: #0071e3; }
+    .note { font-size: 11px; color: #999; margin-top: 16px; }
+  </style>
+</head>
+<body>
+
+<h1>Monthly Cost Estimate — temp-admin-access</h1>
+<p class="subtitle">AWS costs projected by request volume (100–1,000 requests/month) · April 2026 pricing</p>
+
+<div class="cards">
+  <div class="card">
+    <div class="card-label">At 100 requests/mo</div>
+    <div class="card-value" id="cost100">—</div>
+    <div class="card-sub">~1.2 requests/day</div>
+  </div>
+  <div class="card highlight">
+    <div class="card-label">At 500 requests/mo</div>
+    <div class="card-value" id="cost500">—</div>
+    <div class="card-sub">~16.7 requests/day</div>
+  </div>
+  <div class="card">
+    <div class="card-label">At 1,000 requests/mo</div>
+    <div class="card-value" id="cost1000">—</div>
+    <div class="card-sub">~33 requests/day</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Biggest cost driver</div>
+    <div class="card-value" style="font-size:20px">Bedrock</div>
+    <div class="card-sub">AI risk scoring per request</div>
+  </div>
+</div>
+
+<div class="chart-container">
+  <div class="chart-title">Monthly Cost by Service ($USD)</div>
+  <div class="chart-wrap">
+    <canvas id="costChart"></canvas>
+  </div>
+</div>
+
+<div class="table-container">
+  <div class="chart-title">Cost Breakdown by Request Volume</div>
+  <table>
+    <thead>
+      <tr>
+        <th>Requests/mo</th>
+        <th><span class="service-dot" style="background:#FF6B6B"></span>Bedrock</th>
+        <th><span class="service-dot" style="background:#4ECDC4"></span>API Gateway</th>
+        <th><span class="service-dot" style="background:#45B7D1"></span>DynamoDB</th>
+        <th><span class="service-dot" style="background:#96CEB4"></span>Lambda</th>
+        <th><span class="service-dot" style="background:#FFEAA7"></span>EventBridge</th>
+        <th><span class="service-dot" style="background:#DDA0DD"></span>CloudFront/S3</th>
+        <th style="font-weight:700">Total/mo</th>
+        <th>Cost/request</th>
+      </tr>
+    </thead>
+    <tbody id="costTable"></tbody>
+  </table>
+</div>
+
+<div class="assumptions">
+  <h3>Model Assumptions</h3>
+  <ul>
+    <li>~80% approval rate (most requests approved)</li>
+    <li>8 Lambda invocations per request lifecycle</li>
+    <li>Lambda free tier: 1M invocations + 400K GB-seconds/month (permanent)</li>
+    <li>10 API Gateway calls per request (submit, approve, start, status polls, log, dashboard)</li>
+    <li>7 DynamoDB writes + 5 reads per request</li>
+    <li>1 Bedrock call per request after log arrives (risk re-score)</li>
+    <li>Bedrock: ~2,500 input tokens + ~250 output tokens per call</li>
+    <li>Claude 3.5 Haiku pricing: $0.00025/1K input, $0.00125/1K output</li>
+    <li>Risk scores cached 48h per user — repeat users reduce Bedrock calls</li>
+    <li>EventBridge: 2 schedules per approved request (warning + expiry)</li>
+    <li>CloudFront + S3 within free tier at this scale</li>
+    <li>Does not include: KMS ($0 within free tier), CloudWatch Logs (free tier), Route 53, WorkMail (not this project)</li>
+  </ul>
+  <p class="note">This estimate uses account-wide AWS pricing as of April 2026. Actual costs will vary based on session duration, unique users (Bedrock caching), and IT dashboard usage. Enable cost allocation tags (Project=temp-admin-access) in AWS Billing to track actual spend once tags propagate (~24h).</p>
+</div>
+
+<script>
+  // Pricing constants (April 2026)
+  const BEDROCK_INPUT_PER_1K  = 0.00025;   // Claude 3.5 Haiku input
+  const BEDROCK_OUTPUT_PER_1K = 0.00125;   // Claude 3.5 Haiku output
+  const BEDROCK_INPUT_TOKENS  = 2500;      // per call
+  const BEDROCK_OUTPUT_TOKENS = 250;       // per call
+  const API_GW_PER_MILLION    = 3.50;      // REST API
+  const API_CALLS_PER_REQ     = 10;        // per full request lifecycle
+  const DYNAMO_WRITE_PER_M    = 1.25;      // per million WRUs
+  const DYNAMO_READ_PER_M     = 0.25;      // per million RRUs
+  const DYNAMO_WRITES_PER_REQ = 7;
+  const DYNAMO_READS_PER_REQ  = 5;
+  const LAMBDA_PER_M_INVOKE   = 0.20;      // per million invocations
+  const LAMBDA_PER_GB_SEC     = 0.0000166667;
+  const LAMBDA_FREE_INVOKE    = 1000000;   // permanent free tier
+  const LAMBDA_FREE_GB_SEC    = 400000;    // permanent free tier
+  const LAMBDA_INVOKES_PER    = 8;         // per request
+  const LAMBDA_AVG_DURATION   = 1.5;       // seconds avg
+  const LAMBDA_MEMORY_GB      = 0.25;      // 256MB
+  const EB_PER_MILLION        = 1.00;      // EventBridge scheduler
+  const EB_SCHEDULES_PER_REQ  = 2;         // warning + expiration
+  const APPROVAL_RATE         = 0.80;      // 80% of requests approved
+
+  function calcCosts(requests) {
+    const approved = Math.round(requests * APPROVAL_RATE);
+
+    // Bedrock: 1 call per request (risk re-score after log) + initial score on submit
+    // Assume ~70% unique users hit cache miss (conservative)
+    const bedrockCalls = requests * 1.0; // one re-score per log received
+    const bedrockCost = bedrockCalls * (
+      (BEDROCK_INPUT_TOKENS  / 1000 * BEDROCK_INPUT_PER_1K) +
+      (BEDROCK_OUTPUT_TOKENS / 1000 * BEDROCK_OUTPUT_PER_1K)
+    );
+
+    // API Gateway
+    const apiCalls = requests * API_CALLS_PER_REQ;
+    const apiCost = (apiCalls / 1_000_000) * API_GW_PER_MILLION;
+
+    // DynamoDB
+    const writes = requests * DYNAMO_WRITES_PER_REQ;
+    const reads  = requests * DYNAMO_READS_PER_REQ;
+    const dynamoCost = (writes / 1_000_000 * DYNAMO_WRITE_PER_M) +
+                       (reads  / 1_000_000 * DYNAMO_READ_PER_M);
+
+    // Lambda (free tier permanent — at 1000 req we have 8000 invocations, well under 1M)
+    const lambdaInvokes  = requests * LAMBDA_INVOKES_PER;
+    const lambdaGbSec    = lambdaInvokes * LAMBDA_AVG_DURATION * LAMBDA_MEMORY_GB;
+    const billableInvokes = Math.max(0, lambdaInvokes - LAMBDA_FREE_INVOKE);
+    const billableGbSec   = Math.max(0, lambdaGbSec - LAMBDA_FREE_GB_SEC);
+    const lambdaCost = (billableInvokes / 1_000_000 * LAMBDA_PER_M_INVOKE) +
+                       (billableGbSec * LAMBDA_PER_GB_SEC);
+
+    // EventBridge Scheduler (14M free/month — always free at this scale)
+    const ebInvocations = approved * EB_SCHEDULES_PER_REQ;
+    const ebCost = (ebInvocations / 1_000_000) * EB_PER_MILLION;
+
+    // CloudFront + S3 (free tier at this scale)
+    const cfCost = 0.0;
+
+    const total = bedrockCost + apiCost + dynamoCost + lambdaCost + ebCost + cfCost;
+
+    return {
+      bedrock:    bedrockCost,
+      apiGateway: apiCost,
+      dynamo:     dynamoCost,
+      lambda:     lambdaCost,
+      eventbridge: ebCost,
+      cloudfront: cfCost,
+      total,
+      perRequest: total / requests
+    };
+  }
+
+  const volumes = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000];
+  const data = volumes.map(v => ({ volume: v, ...calcCosts(v) }));
+
+  // Fill summary cards
+  const fmt = n => n < 0.01 ? '<$0.01' : '$' + n.toFixed(2);
+  document.getElementById('cost100').textContent  = fmt(data[0].total);
+  document.getElementById('cost500').textContent  = fmt(data[4].total);
+  document.getElementById('cost1000').textContent = fmt(data[9].total);
+
+  // Fill table
+  const tbody = document.getElementById('costTable');
+  data.forEach(d => {
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td><strong>${d.volume.toLocaleString()}</strong></td>
+      <td>$${d.bedrock.toFixed(3)}</td>
+      <td>$${d.apiGateway.toFixed(4)}</td>
+      <td>$${d.dynamo.toFixed(4)}</td>
+      <td>${d.lambda === 0 ? '<span style="color:#6e6e73">free tier</span>' : '$' + d.lambda.toFixed(4)}</td>
+      <td>$${d.eventbridge.toFixed(4)}</td>
+      <td><span style="color:#6e6e73">free tier</span></td>
+      <td><strong>$${d.total.toFixed(3)}</strong></td>
+      <td style="color:#6e6e73">$${d.perRequest.toFixed(4)}</td>
+    `;
+    tbody.appendChild(row);
+  });
+
+  // Chart
+  const ctx = document.getElementById('costChart').getContext('2d');
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: volumes.map(v => v.toLocaleString()),
+      datasets: [
+        {
+          label: 'Bedrock (AI Risk Score)',
+          data: data.map(d => +d.bedrock.toFixed(4)),
+          backgroundColor: '#FF6B6B',
+          borderRadius: 4,
+        },
+        {
+          label: 'API Gateway',
+          data: data.map(d => +d.apiGateway.toFixed(4)),
+          backgroundColor: '#4ECDC4',
+          borderRadius: 4,
+        },
+        {
+          label: 'DynamoDB',
+          data: data.map(d => +d.dynamo.toFixed(4)),
+          backgroundColor: '#45B7D1',
+          borderRadius: 4,
+        },
+        {
+          label: 'Lambda',
+          data: data.map(d => +d.lambda.toFixed(4)),
+          backgroundColor: '#96CEB4',
+          borderRadius: 4,
+        },
+        {
+          label: 'EventBridge',
+          data: data.map(d => +d.eventbridge.toFixed(4)),
+          backgroundColor: '#FFEAA7',
+          borderRadius: 4,
+        },
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: { font: { size: 12 }, padding: 16, usePointStyle: true }
+        },
+        tooltip: {
+          callbacks: {
+            label: ctx => ` ${ctx.dataset.label}: $${ctx.parsed.y.toFixed(4)}`,
+            footer: items => {
+              const total = items.reduce((s, i) => s + i.parsed.y, 0);
+              return `Total: $${total.toFixed(3)}/month`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          stacked: true,
+          title: { display: true, text: 'Requests per month', font: { size: 12 } },
+          grid: { display: false }
+        },
+        y: {
+          stacked: true,
+          title: { display: true, text: 'Cost (USD)', font: { size: 12 } },
+          ticks: {
+            callback: v => '$' + v.toFixed(2)
+          }
+        }
+      }
+    }
+  });
+</script>
+</body>
+</html>

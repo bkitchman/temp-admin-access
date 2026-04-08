@@ -669,6 +669,44 @@ HTTP_STATUS=$(curl -s -o "$ELEVATION_RESPONSE_FILE" -w "%{http_code}" \
       <li><strong>Degraded log warning:</strong> If timezone conversion fails during log collection, a visible warning is prepended to the uploaded log.</li>
     </ul>
 
+    <!-- COST -->
+    <h2 id="cost">What Does It Cost?</h2>
+    <p class="fade-in">Fully serverless means you only pay for what runs. At typical usage the entire stack costs under a dollar a month — Lambda and EventBridge stay within the permanent free tier, and Bedrock (the AI risk scoring) is the only real line item.</p>
+
+    <div class="fade-in" style="background:var(--bg-card,#fff);border:1px solid var(--border);border-radius:12px;padding:28px 24px;margin:24px 0">
+      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:24px">
+        <div style="flex:1;min-width:120px;background:var(--bg,#f8fafc);border-radius:8px;padding:16px">
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:4px">100 req/mo</div>
+          <div id="blog-cost-100" style="font-size:26px;font-weight:700">—</div>
+        </div>
+        <div style="flex:1;min-width:120px;background:rgba(6,182,212,.07);border:1px solid rgba(6,182,212,.2);border-radius:8px;padding:16px">
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:4px">1k req/mo</div>
+          <div id="blog-cost-1000" style="font-size:26px;font-weight:700;color:var(--accent)">—</div>
+        </div>
+        <div style="flex:1;min-width:120px;background:var(--bg,#f8fafc);border-radius:8px;padding:16px">
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:4px">10k req/mo</div>
+          <div id="blog-cost-10000" style="font-size:26px;font-weight:700">—</div>
+        </div>
+        <div style="flex:1;min-width:120px;background:var(--bg,#f8fafc);border-radius:8px;padding:16px">
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:4px">20k req/mo</div>
+          <div id="blog-cost-20000" style="font-size:26px;font-weight:700">—</div>
+        </div>
+      </div>
+
+      <div style="position:relative;height:260px">
+        <canvas id="blogCostChart"></canvas>
+      </div>
+
+      <div style="margin-top:16px;display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--text-muted)">
+        <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#f87171;margin-right:4px;vertical-align:middle"></span>Bedrock (AI scoring)</span>
+        <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#34d399;margin-right:4px;vertical-align:middle"></span>API Gateway</span>
+        <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#60a5fa;margin-right:4px;vertical-align:middle"></span>DynamoDB</span>
+        <span style="color:var(--text-light)">Lambda, EventBridge, CloudFront: within free tier at all volumes shown</span>
+      </div>
+    </div>
+
+    <p class="fade-in" style="font-size:14px;color:var(--text-muted)">Bedrock is ~95% of cost because every session triggers a Claude Haiku risk re-score after the sudo log arrives. Scores are cached 48h per user, so repeat users reduce this further. See <a href="https://github.com/bkitchman/temp-admin-access/blob/master/docs/cost-estimate.html">full cost breakdown →</a></p>
+
     <!-- VERSION HISTORY -->
     <h2 id="version-history">Version History</h2>
     <p class="fade-in">Each release is tagged on GitHub — download any version as a zip or clone the tag directly.</p>
@@ -755,6 +793,7 @@ HTTP_STATUS=$(curl -s -o "$ELEVATION_RESPONSE_FILE" -w "%{http_code}" \
       <a href="#lessons">Lessons Learned</a>
       <a href="#stats">By the Numbers</a>
       <a href="#recently-shipped">Recently Shipped</a>
+      <a href="#cost">Cost</a>
       <a href="#version-history">Version History</a>
       <a href="#whats-next">What's Next</a>
     </nav>
@@ -814,6 +853,99 @@ HTTP_STATUS=$(curl -s -o "$ELEVATION_RESPONSE_FILE" -w "%{http_code}" \
     });
   }, { rootMargin: '-10% 0px -80% 0px' });
   headings.forEach(h => headingObs.observe(h));
+
+  // ── Cost chart ──
+  (function() {
+    const BEDROCK_INPUT_PER_1K  = 0.00025;
+    const BEDROCK_OUTPUT_PER_1K = 0.00125;
+    const BEDROCK_INPUT_TOKENS  = 2500;
+    const BEDROCK_OUTPUT_TOKENS = 250;
+    const API_GW_PER_MILLION    = 3.50;
+    const API_CALLS_PER_REQ     = 10;
+    const DYNAMO_WRITE_PER_M    = 1.25;
+    const DYNAMO_READ_PER_M     = 0.25;
+    const DYNAMO_WRITES_PER_REQ = 7;
+    const DYNAMO_READS_PER_REQ  = 5;
+
+    function calcCosts(requests) {
+      const bedrock = requests *
+        ((BEDROCK_INPUT_TOKENS  / 1000 * BEDROCK_INPUT_PER_1K) +
+         (BEDROCK_OUTPUT_TOKENS / 1000 * BEDROCK_OUTPUT_PER_1K));
+      const api = (requests * API_CALLS_PER_REQ / 1_000_000) * API_GW_PER_MILLION;
+      const dynamo =
+        (requests * DYNAMO_WRITES_PER_REQ / 1_000_000 * DYNAMO_WRITE_PER_M) +
+        (requests * DYNAMO_READS_PER_REQ  / 1_000_000 * DYNAMO_READ_PER_M);
+      return { bedrock, api, dynamo, total: bedrock + api + dynamo };
+    }
+
+    const volumes = [100, 1000, 5000, 10000, 20000];
+    const labels  = ['100', '1k', '5k', '10k', '20k'];
+    const data    = volumes.map(calcCosts);
+
+    const fmt = n => n < 0.01 ? '<$0.01' : '$' + n.toFixed(2);
+    document.getElementById('blog-cost-100').textContent   = fmt(data[0].total);
+    document.getElementById('blog-cost-1000').textContent  = fmt(data[1].total);
+    document.getElementById('blog-cost-10000').textContent = fmt(data[3].total);
+    document.getElementById('blog-cost-20000').textContent = fmt(data[4].total);
+
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js';
+    script.onload = function() {
+      const ctx = document.getElementById('blogCostChart').getContext('2d');
+      new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            {
+              label: 'Bedrock',
+              data: data.map(d => +d.bedrock.toFixed(3)),
+              backgroundColor: '#f87171',
+              borderRadius: 5,
+            },
+            {
+              label: 'API Gateway',
+              data: data.map(d => +d.api.toFixed(3)),
+              backgroundColor: '#34d399',
+              borderRadius: 5,
+            },
+            {
+              label: 'DynamoDB',
+              data: data.map(d => +d.dynamo.toFixed(3)),
+              backgroundColor: '#60a5fa',
+              borderRadius: 5,
+            },
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: c => ` ${c.dataset.label}: $${c.parsed.y.toFixed(3)}`,
+                footer: items => `Total: $${items.reduce((s,i) => s + i.parsed.y, 0).toFixed(2)}/mo`
+              }
+            }
+          },
+          scales: {
+            x: {
+              stacked: true,
+              title: { display: true, text: 'Requests / month', font: { size: 11 } },
+              grid: { display: false }
+            },
+            y: {
+              stacked: true,
+              title: { display: true, text: 'USD / month', font: { size: 11 } },
+              ticks: { callback: v => '$' + (v >= 1 ? v.toFixed(0) : v.toFixed(2)) }
+            }
+          }
+        }
+      });
+    };
+    document.head.appendChild(script);
+  })();
 </script>
 
 </body>
