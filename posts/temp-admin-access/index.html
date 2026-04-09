@@ -824,6 +824,7 @@ HTTP_STATUS=$(curl -s -o "$ELEVATION_RESPONSE_FILE" -w "%{http_code}" \
     </div>
 
     <p class="fade-in" style="font-size:14px;color:var(--text-muted)">Bedrock is ~95% of total cost because every completed session triggers a Claude Haiku 4.5 risk re-score. Scores are cached 48h per user, so frequent users cost less over time. Requests that expire unanswered (<code>expired_unanswered</code>) are never scored — no session, no cost. See <a href="https://github.com/bkitchman/temp-admin-access/blob/master/docs/cost-estimate.html">full cost breakdown →</a></p>
+    <p class="fade-in" style="font-size:12px;color:var(--text-muted);font-style:italic">Estimates are based on assumed average request frequency by team size. Actual costs will vary based on how often your engineers request access, session duration, and the number of sudo commands run per session.</p>
 
     <!-- VERSION HISTORY -->
     <h2 id="version-history">Version History</h2>
