@@ -327,6 +327,27 @@
   }
   #lightbox-close:hover { background: rgba(255,255,255,.3); }
   #lightbox-close:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+  .lightbox-arrow {
+    position: fixed;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 44px;
+    height: 44px;
+    background: rgba(255,255,255,.15);
+    border: 1px solid rgba(255,255,255,.3);
+    border-radius: 50%;
+    color: #fff;
+    font-size: 22px;
+    line-height: 42px;
+    text-align: center;
+    cursor: pointer;
+    transition: background .15s;
+  }
+  #lightbox-prev { left: 20px; }
+  #lightbox-next { right: 20px; }
+  .lightbox-arrow:hover { background: rgba(255,255,255,.3); }
+  .lightbox-arrow:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+  .lightbox-arrow[hidden] { display: none; }
   #lightbox-caption {
     position: fixed;
     bottom: 28px;
@@ -1059,6 +1080,8 @@ HTTP_STATUS=$(curl -s -o "$ELEVATION_RESPONSE_FILE" -w "%{http_code}" \
 
 <div id="lightbox" role="dialog" aria-modal="true" aria-label="Screenshot viewer">
   <button id="lightbox-close" aria-label="Close image viewer">&#x2715;</button>
+  <button id="lightbox-prev" class="lightbox-arrow" aria-label="Previous image">&#x2039;</button>
+  <button id="lightbox-next" class="lightbox-arrow" aria-label="Next image">&#x203A;</button>
   <img id="lightbox-img" src="" alt="">
   <div id="lightbox-caption" aria-live="polite"></div>
 </div>
@@ -1069,20 +1092,31 @@ HTTP_STATUS=$(curl -s -o "$ELEVATION_RESPONSE_FILE" -w "%{http_code}" \
 
 <script>
   // ── Lightbox ──
-  const lightbox     = document.getElementById('lightbox');
-  const lightboxImg  = document.getElementById('lightbox-img');
+  const lightbox      = document.getElementById('lightbox');
+  const lightboxImg   = document.getElementById('lightbox-img');
   const lightboxClose = document.getElementById('lightbox-close');
+  const lightboxPrev  = document.getElementById('lightbox-prev');
+  const lightboxNext  = document.getElementById('lightbox-next');
+  const lightboxCap   = document.getElementById('lightbox-caption');
 
-  document.querySelectorAll('a[data-lightbox]').forEach(a => {
-    a.addEventListener('click', e => {
-      e.preventDefault();
-      lightboxImg.src = a.href;
-      lightboxImg.alt = a.querySelector('img').alt;
-      document.getElementById('lightbox-caption').textContent = a.dataset.caption || '';
-      lightbox.classList.add('open');
-      document.body.style.overflow = 'hidden';
-      lightboxClose.focus();
-    });
+  const galleryLinks = Array.from(document.querySelectorAll('a[data-lightbox]'));
+  let currentIndex = 0;
+
+  function openLightbox(index) {
+    currentIndex = index;
+    const a = galleryLinks[index];
+    lightboxImg.src = a.href;
+    lightboxImg.alt = a.querySelector('img').alt;
+    lightboxCap.textContent = a.dataset.caption || '';
+    lightboxPrev.hidden = index === 0;
+    lightboxNext.hidden = index === galleryLinks.length - 1;
+    lightbox.classList.add('open');
+    document.body.style.overflow = 'hidden';
+    lightboxClose.focus();
+  }
+
+  galleryLinks.forEach((a, i) => {
+    a.addEventListener('click', e => { e.preventDefault(); openLightbox(i); });
   });
 
   function closeLightbox() {
@@ -1091,9 +1125,16 @@ HTTP_STATUS=$(curl -s -o "$ELEVATION_RESPONSE_FILE" -w "%{http_code}" \
     document.body.style.overflow = '';
   }
 
+  lightboxPrev.addEventListener('click', () => { if (currentIndex > 0) openLightbox(currentIndex - 1); });
+  lightboxNext.addEventListener('click', () => { if (currentIndex < galleryLinks.length - 1) openLightbox(currentIndex + 1); });
   lightboxClose.addEventListener('click', closeLightbox);
   lightbox.addEventListener('click', e => { if (e.target === lightbox) closeLightbox(); });
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLightbox(); });
+  document.addEventListener('keydown', e => {
+    if (!lightbox.classList.contains('open')) return;
+    if (e.key === 'Escape') closeLightbox();
+    if (e.key === 'ArrowLeft'  && currentIndex > 0) openLightbox(currentIndex - 1);
+    if (e.key === 'ArrowRight' && currentIndex < galleryLinks.length - 1) openLightbox(currentIndex + 1);
+  });
 
   // ── Read progress bar ──
   const progressBar = document.getElementById('progress');
