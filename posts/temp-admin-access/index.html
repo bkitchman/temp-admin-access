@@ -292,6 +292,40 @@
   .screenshot-wrap a:hover img {
     opacity: .88;
   }
+  /* Lightbox */
+  #lightbox {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: rgba(0,0,0,.85);
+    align-items: center;
+    justify-content: center;
+  }
+  #lightbox.open { display: flex; }
+  #lightbox img {
+    max-width: 90vw;
+    max-height: 90vh;
+    border-radius: 8px;
+    box-shadow: 0 24px 64px rgba(0,0,0,.6);
+  }
+  #lightbox-close {
+    position: fixed;
+    top: 20px;
+    right: 24px;
+    width: 36px;
+    height: 36px;
+    background: rgba(255,255,255,.15);
+    border: 1px solid rgba(255,255,255,.3);
+    border-radius: 50%;
+    color: #fff;
+    font-size: 20px;
+    line-height: 34px;
+    text-align: center;
+    cursor: pointer;
+    transition: background .15s;
+  }
+  #lightbox-close:hover { background: rgba(255,255,255,.3); }
   .screenshot-caption {
     font-size: .8rem; color: var(--text-muted);
     text-align: center; padding: .6rem 1rem;
@@ -417,15 +451,15 @@
         </div>
       </div>
       <div class="screenshot-wrap fade-in">
-        <a href="img/screenshot-slack-approval.png" target="_blank" rel="noopener"><img src="img/screenshot-slack-approval.png" alt="Slack approval card showing full request details, AI risk score, and approve/deny buttons"></a>
+        <a href="img/screenshot-slack-approval.png" data-lightbox><img src="img/screenshot-slack-approval.png" alt="Slack approval card showing full request details, AI risk score, and approve/deny buttons"></a>
         <div class="screenshot-caption">The Slack approval card — device hostname, serial, reason, category, and requested duration all visible at a glance. The AI risk score is shown inline so IT has behavioral context before approving. IT can approve at any duration or deny outright.</div>
       </div>
       <div class="screenshot-wrap fade-in">
-        <a href="img/screenshot-pending-nudges.png" target="_blank" rel="noopener"><img src="img/screenshot-pending-nudges.png" alt="Slack thread showing repeated nudge replies when an IT approval request goes unanswered"></a>
+        <a href="img/screenshot-pending-nudges.png" data-lightbox><img src="img/screenshot-pending-nudges.png" alt="Slack thread showing repeated nudge replies when an IT approval request goes unanswered"></a>
         <div class="screenshot-caption">If IT doesn't respond, the system sends nudge replies to the original thread at increasing intervals — every 10 minutes for the first hour, then every 60 minutes. After 24 hours with no action, the request is auto-denied and the thread is updated.</div>
       </div>
       <div class="screenshot-wrap fade-in">
-        <a href="img/screenshot-auto-deny.png" target="_blank" rel="noopener"><img src="img/screenshot-auto-deny.png" alt="Slack message showing the request expired after 1 hour with no IT response"></a>
+        <a href="img/screenshot-auto-deny.png" data-lightbox><img src="img/screenshot-auto-deny.png" alt="Slack message showing the request expired after 1 hour with no IT response"></a>
         <div class="screenshot-caption">When no IT response arrives within 24 hours (1 hour in testing mode), the request is automatically closed as <code>expired_unanswered</code>. The thread is updated and the user is notified — these requests are excluded from AI risk scoring since no session actually occurred.</div>
       </div>
       <div class="flow-step">
@@ -444,7 +478,7 @@
         <div class="screenshot-caption">SAP Privileges fires a macOS notification confirming the admin grant. From the user's perspective, elevation is seamless — they approve the IT request and within seconds the Privileges app quietly elevates them without any additional interaction.</div>
       </div>
       <div class="screenshot-wrap fade-in">
-        <a href="img/screenshot-user-dm.png" target="_blank" rel="noopener"><img src="img/screenshot-user-dm.png" alt="Slack DM sent to the user confirming their admin access was approved and later revoked"></a>
+        <a href="img/screenshot-user-dm.png" data-lightbox><img src="img/screenshot-user-dm.png" alt="Slack DM sent to the user confirming their admin access was approved and later revoked"></a>
         <div class="screenshot-caption">The user receives a Slack DM when their request is approved — with a reminder that Iru needs to check in before elevation starts. A separate DM is sent on revocation or expiry so the user always knows their current access state.</div>
       </div>
       <div class="flow-step">
@@ -455,7 +489,7 @@
         </div>
       </div>
       <div class="screenshot-wrap fade-in">
-        <a href="img/screenshot-it-controls.png" target="_blank" rel="noopener"><img src="img/screenshot-it-controls.png" alt="Slack thread showing approval confirmed, access active with expiry time, and Revoke Now and Lock Device buttons"></a>
+        <a href="img/screenshot-it-controls.png" data-lightbox><img src="img/screenshot-it-controls.png" alt="Slack thread showing approval confirmed, access active with expiry time, and Revoke Now and Lock Device buttons"></a>
         <div class="screenshot-caption">After elevation is confirmed, the Slack thread updates showing the session is active with an expiry time. IT gets <strong>Revoke Access Now</strong> to immediately strip access and <strong>Lock Device</strong> to issue an MDM lock command. The thread becomes a full audit trail for the session.</div>
       </div>
       <div class="screenshot-wrap screenshot-wrap--small fade-in">
@@ -470,7 +504,7 @@
         </div>
       </div>
       <div class="screenshot-wrap fade-in">
-        <a href="img/screenshot-5min-warning.png" target="_blank" rel="noopener"><img src="img/screenshot-5min-warning.png" alt="Slack thread showing 5-minute warning sent to the user before session expiry"></a>
+        <a href="img/screenshot-5min-warning.png" data-lightbox><img src="img/screenshot-5min-warning.png" alt="Slack thread showing 5-minute warning sent to the user before session expiry"></a>
         <div class="screenshot-caption">Five minutes before expiry, the backend posts a warning to the Slack thread and sends the user a DM. This gives them time to save work before admin access is removed.</div>
       </div>
       <div class="flow-step">
@@ -481,7 +515,7 @@
         </div>
       </div>
       <div class="screenshot-wrap fade-in">
-        <a href="img/screenshot-session-expired.png" target="_blank" rel="noopener"><img src="img/screenshot-session-expired.png" alt="Slack thread showing session expired and sudo log collected inline"></a>
+        <a href="img/screenshot-session-expired.png" data-lightbox><img src="img/screenshot-session-expired.png" alt="Slack thread showing session expired and sudo log collected inline"></a>
         <div class="screenshot-caption">On expiration, the Slack thread shows the session closed and the collected sudo log is attached inline. Every <code>sudo</code> command run during the session is visible to IT without leaving Slack.</div>
       </div>
       <div class="flow-step">
@@ -492,7 +526,7 @@
         </div>
       </div>
       <div class="screenshot-wrap fade-in">
-        <a href="img/screenshot-dashboard-detail.png" target="_blank" rel="noopener"><img src="img/screenshot-dashboard-detail.png" alt="Dashboard user detail showing AI risk score, behavioral analysis, request history table with sudo log expanded"></a>
+        <a href="img/screenshot-dashboard-detail.png" data-lightbox><img src="img/screenshot-dashboard-detail.png" alt="Dashboard user detail showing AI risk score, behavioral analysis, request history table with sudo log expanded"></a>
         <div class="screenshot-caption">The IT risk dashboard — per-user AI risk score (0–100) with a full narrative assessment, behavioral key factors, and a request history table with expandable sudo logs. Accessible directly from each Slack approval thread via a 30-minute session token.</div>
       </div>
     </div>
@@ -501,7 +535,7 @@
     <h2 id="architecture">Architecture</h2>
 
     <div class="screenshot-wrap fade-in">
-      <a href="img/screenshot-iru-blueprint.png" target="_blank" rel="noopener"><img src="img/screenshot-iru-blueprint.png" alt="Iru Blueprint showing conditional tag-based Library Item assignment for each duration"></a>
+      <a href="img/screenshot-iru-blueprint.png" data-lightbox><img src="img/screenshot-iru-blueprint.png" alt="Iru Blueprint showing conditional tag-based Library Item assignment for each duration"></a>
       <div class="screenshot-caption">The Iru Blueprint — tag-based conditional logic assigns the correct SAP Privileges profile (5, 10, 15, or 30 min) when the matching elevation tag is present, then triggers elevation-start and log collection scripts in sequence.</div>
     </div>
 
@@ -859,11 +893,41 @@ HTTP_STATUS=$(curl -s -o "$ELEVATION_RESPONSE_FILE" -w "%{http_code}" \
 
 </div>
 
+<div id="lightbox" role="dialog" aria-modal="true">
+  <span id="lightbox-close" aria-label="Close">&#x2715;</span>
+  <img id="lightbox-img" src="" alt="">
+</div>
+
 <footer>
   <p>Built by <a href="https://github.com/bkitchman">Bryan Kitchman</a> &nbsp;·&nbsp; <a href="/">kitchman.net</a> &nbsp;·&nbsp; <a href="https://github.com/bkitchman/temp-admin-access">GitHub</a> &nbsp;·&nbsp; AWS SAM · Iru MDM · SAP Privileges · Slack</p>
 </footer>
 
 <script>
+  // ── Lightbox ──
+  const lightbox     = document.getElementById('lightbox');
+  const lightboxImg  = document.getElementById('lightbox-img');
+  const lightboxClose = document.getElementById('lightbox-close');
+
+  document.querySelectorAll('.screenshot-wrap a[data-lightbox]').forEach(a => {
+    a.addEventListener('click', e => {
+      e.preventDefault();
+      lightboxImg.src = a.href;
+      lightboxImg.alt = a.querySelector('img').alt;
+      lightbox.classList.add('open');
+      document.body.style.overflow = 'hidden';
+    });
+  });
+
+  function closeLightbox() {
+    lightbox.classList.remove('open');
+    lightboxImg.src = '';
+    document.body.style.overflow = '';
+  }
+
+  lightboxClose.addEventListener('click', closeLightbox);
+  lightbox.addEventListener('click', e => { if (e.target === lightbox) closeLightbox(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLightbox(); });
+
   // ── Read progress bar ──
   const progressBar = document.getElementById('progress');
   window.addEventListener('scroll', () => {
