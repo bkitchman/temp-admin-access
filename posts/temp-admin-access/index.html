@@ -326,6 +326,21 @@
     transition: background .15s;
   }
   #lightbox-close:hover { background: rgba(255,255,255,.3); }
+  #lightbox-close:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+  #lightbox-caption {
+    position: fixed;
+    bottom: 28px;
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: 640px;
+    width: 90vw;
+    text-align: center;
+    font-size: 13px;
+    color: rgba(255,255,255,.75);
+    line-height: 1.5;
+    pointer-events: none;
+    padding: 0 12px;
+  }
   .screenshot-caption {
     font-size: .8rem; color: var(--text-muted);
     text-align: center; padding: .6rem 1rem;
@@ -347,9 +362,96 @@
   footer a { color: #94a3b8; }
   footer a:hover { color: #fff; }
 
+  /* ── Screenshot gallery grid ── */
+  .screenshot-gallery {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin: 1.5rem 0 2.5rem;
+  }
+  .gallery-item {
+    margin: 0;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    box-shadow: 0 2px 8px rgba(0,0,0,.08);
+    transition: transform .2s ease, box-shadow .2s ease;
+    background: var(--bg);
+  }
+  .gallery-item:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 20px rgba(0,0,0,.15);
+  }
+  .gallery-item a {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 110px;
+    overflow: hidden;
+    background: var(--bg);
+    cursor: zoom-in;
+  }
+  .gallery-item img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    transition: opacity .15s;
+    display: block;
+  }
+  .gallery-item:hover img { opacity: .88; }
+  .gallery-label {
+    font-size: 10px;
+    text-align: center;
+    padding: 5px 6px;
+    background: var(--bg-card);
+    border-top: 1px solid var(--border);
+    color: var(--text-muted);
+    line-height: 1.4;
+  }
+  .gallery-step {
+    font-size: 9px;
+    color: var(--accent);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    display: block;
+  }
+  @media (max-width: 700px) { .screenshot-gallery { grid-template-columns: repeat(2, 1fr); } }
+
+  /* ── Skip nav ── */
+  .skip-nav {
+    position: absolute;
+    top: -48px;
+    left: 0;
+    background: var(--blue);
+    color: #fff;
+    padding: 8px 18px;
+    border-radius: 0 0 8px 0;
+    font-size: 14px;
+    font-weight: 600;
+    z-index: 10000;
+    text-decoration: none;
+    transition: top .1s;
+  }
+  .skip-nav:focus { top: 0; }
+
+  /* ── Visible focus styles ── */
+  a:focus-visible, button:focus-visible, [tabindex="0"]:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
   /* ── Fade-in animation ── */
   .fade-in { opacity: 0; transform: translateY(20px); transition: opacity .5s ease, transform .5s ease; }
   .fade-in.visible { opacity: 1; transform: none; }
+
+  /* ── Respect prefers-reduced-motion ── */
+  @media (prefers-reduced-motion: reduce) {
+    .fade-in { opacity: 1; transform: none; transition: none; }
+    .fade-in.visible { opacity: 1; transform: none; }
+    .gallery-item, .gallery-item img, html { transition: none; scroll-behavior: auto; }
+  }
 
   /* ── Responsive ── */
   @media (max-width: 900px) {
@@ -365,7 +467,8 @@
 </head>
 <body>
 
-<div id="progress"></div>
+<a href="#main-content" class="skip-nav">Skip to content</a>
+<div id="progress" aria-hidden="true"></div>
 
 <!-- ══════════════════════════════ HERO ══════════════════════════════ -->
 <div class="hero">
@@ -394,7 +497,7 @@
 <!-- ══════════════════════════════ BODY ══════════════════════════════ -->
 <div class="page-wrap">
 
-  <main class="content">
+  <main class="content" id="main-content">
 
     <!-- THE PROBLEM -->
     <h2 id="problem">The Problem</h2>
@@ -425,110 +528,142 @@
 
     <div class="flow">
       <div class="flow-step">
-        <div class="step-num">1</div>
+        <div class="step-num" aria-hidden="true">1</div>
         <div class="step-text">
           <strong>User opens Iru Self Service and clicks "Request Admin Access"</strong>
           <span>A compiled AppKit form presents a single window with a reason field, duration picker (5, 10, 15, or 30 minutes), and category selector (Install, Debug, Config, Security, Developer, Other). The script collects device identity (hostname, serial) and POSTs a signed request to an API Gateway endpoint.</span>
         </div>
       </div>
-      <div class="screenshot-wrap fade-in">
-        <img src="img/screenshot-request-form.png" alt="Single-screen AppKit request form showing reason, duration, and category fields">
-        <div class="screenshot-caption">The compiled AppKit form — all three fields in one window. Duration uses a segmented control; category uses radio buttons, both of which work reliably under the <code>launchctl asuser + sudo</code> execution context.</div>
-      </div>
-      <div class="screenshot-wrap screenshot-wrap--small fade-in">
-        <img src="img/screenshot-pending-alert.png" alt="On-device alert confirming the admin access request was submitted and is pending IT approval">
-        <div class="screenshot-caption">After submitting, the user sees an on-device alert confirming their request is pending IT approval. They'll receive a follow-up alert and Slack DM once a decision is made.</div>
-      </div>
-      <div class="screenshot-wrap screenshot-wrap--small fade-in">
-        <img src="img/screenshot-already-admin.png" alt="On-device alert showing the user already has temporary admin access with time remaining">
-        <div class="screenshot-caption">If the user runs the Self Service script while already elevated, the script detects the active session and shows the remaining time — no duplicate request is created.</div>
-      </div>
       <div class="flow-step">
-        <div class="step-num">2</div>
+        <div class="step-num" aria-hidden="true">2</div>
         <div class="step-text">
           <strong>IT receives an interactive Slack approval message</strong>
           <span>The message shows user, hostname, serial, reason, and category. IT sees four duration-labeled Approve buttons (5/10/15/30 min) — they can approve at the user's requested duration or override it — plus a Deny button. Posted to a dedicated IT channel.</span>
         </div>
       </div>
-      <div class="screenshot-wrap fade-in">
-        <a href="img/screenshot-slack-approval.png" data-lightbox><img src="img/screenshot-slack-approval.png" alt="Slack approval card showing full request details, AI risk score, and approve/deny buttons"></a>
-        <div class="screenshot-caption">The Slack approval card — device hostname, serial, reason, category, and requested duration all visible at a glance. The AI risk score is shown inline so IT has behavioral context before approving. IT can approve at any duration or deny outright.</div>
-      </div>
-      <div class="screenshot-wrap fade-in">
-        <a href="img/screenshot-pending-nudges.png" data-lightbox><img src="img/screenshot-pending-nudges.png" alt="Slack thread showing repeated nudge replies when an IT approval request goes unanswered"></a>
-        <div class="screenshot-caption">If IT doesn't respond, the system sends nudge replies to the original thread at increasing intervals — every 10 minutes for the first hour, then every 60 minutes. After 24 hours with no action, the request is auto-denied and the thread is updated.</div>
-      </div>
-      <div class="screenshot-wrap fade-in">
-        <a href="img/screenshot-auto-deny.png" data-lightbox><img src="img/screenshot-auto-deny.png" alt="Slack message showing the request expired after 1 hour with no IT response"></a>
-        <div class="screenshot-caption">When no IT response arrives within 24 hours (1 hour in testing mode), the request is automatically closed as <code>expired_unanswered</code>. The thread is updated and the user is notified — these requests are excluded from AI risk scoring since no session actually occurred.</div>
-      </div>
       <div class="flow-step">
-        <div class="step-num">3</div>
+        <div class="step-num" aria-hidden="true">3</div>
         <div class="step-text">
           <strong>IT clicks Approve — duration-specific Iru tag assigned + background monitor detects it</strong>
           <span>A background LaunchDaemon polls <code>/status</code> every 20 seconds. On approval, it calls <code>iru run</code> directly — the fastest path to processing Library Items. The user sees an "approved" alert within 20 seconds. Each duration maps to a distinct Iru tag, which scopes its own SAP Privileges MDM profile with the matching <code>ExpirationInterval</code>.</span>
         </div>
       </div>
-      <div class="screenshot-wrap fade-in">
-        <img src="img/screenshot-approved-notification.png" alt="On-device alert showing admin access was approved and elevation is being applied">
-        <div class="screenshot-caption">The user receives an on-device alert within seconds of IT approving. The background approval-monitor LaunchDaemon polls the backend and triggers <code>iru run</code> to apply the elevation tag immediately.</div>
-      </div>
-      <div class="screenshot-wrap fade-in">
-        <img src="img/screenshot-sap-privileges.png" alt="macOS SAP Privileges notification confirming administrator privileges were successfully granted">
-        <div class="screenshot-caption">SAP Privileges fires a macOS notification confirming the admin grant. From the user's perspective, elevation is seamless — they approve the IT request and within seconds the Privileges app quietly elevates them without any additional interaction.</div>
-      </div>
-      <div class="screenshot-wrap fade-in">
-        <a href="img/screenshot-user-dm.png" data-lightbox><img src="img/screenshot-user-dm.png" alt="Slack DM sent to the user confirming their admin access was approved and later revoked"></a>
-        <div class="screenshot-caption">The user receives a Slack DM when their request is approved — with a reminder that Iru needs to check in before elevation starts. A separate DM is sent on revocation or expiry so the user always knows their current access state.</div>
-      </div>
       <div class="flow-step">
-        <div class="step-num">4</div>
+        <div class="step-num" aria-hidden="true">4</div>
         <div class="step-text">
           <strong>Device runs elevation-start.sh via Iru Library Item</strong>
           <span>Calls <code>PrivilegesCLI --add</code> to grant admin, enables a sudoers drop-in for command logging, notifies the backend to start the N-minute timer, and starts a persistent network monitor LaunchDaemon. The monitor loops continuously — checking admin group membership every 1s, network every 5s, and backend status every 60s. If network is lost, admin is stripped immediately and re-elevation attempts via the Privileges app are blocked within 1 second until connectivity is restored.</span>
         </div>
       </div>
-      <div class="screenshot-wrap fade-in">
-        <a href="img/screenshot-it-controls.png" data-lightbox><img src="img/screenshot-it-controls.png" alt="Slack thread showing approval confirmed, access active with expiry time, and Revoke Now and Lock Device buttons"></a>
-        <div class="screenshot-caption">After elevation is confirmed, the Slack thread updates showing the session is active with an expiry time. IT gets <strong>Revoke Access Now</strong> to immediately strip access and <strong>Lock Device</strong> to issue an MDM lock command. The thread becomes a full audit trail for the session.</div>
-      </div>
-      <div class="screenshot-wrap screenshot-wrap--small fade-in">
-        <img src="img/screenshot-session-ended.png" alt="On-device alert confirming the user ended their admin session early via Self Service">
-        <div class="screenshot-caption">Users can end their session early from Self Service — no need to wait for the timer. The script calls <code>/end</code>, cancels the expiration schedules, and triggers log collection immediately. IT sees the thread updated with elapsed time.</div>
-      </div>
       <div class="flow-step">
-        <div class="step-num">5</div>
+        <div class="step-num" aria-hidden="true">5</div>
         <div class="step-text">
           <strong>EventBridge sends a 5-minute warning DM, then fires expiration at T+N</strong>
           <span>Timers are anchored to when the <em>device</em> confirms elevation — not when IT clicks Approve. The user always gets the full approved duration. The warning DM is skipped entirely for 5-minute sessions (a T+0 warning would be instant noise).</span>
         </div>
       </div>
-      <div class="screenshot-wrap fade-in">
-        <a href="img/screenshot-5min-warning.png" data-lightbox><img src="img/screenshot-5min-warning.png" alt="Slack thread showing 5-minute warning sent to the user before session expiry"></a>
-        <div class="screenshot-caption">Five minutes before expiry, the backend posts a warning to the Slack thread and sends the user a DM. This gives them time to save work before admin access is removed.</div>
-      </div>
       <div class="flow-step">
-        <div class="step-num">6</div>
+        <div class="step-num" aria-hidden="true">6</div>
         <div class="step-text">
           <strong>On expiration, Iru removes the tag and collects the sudo log</strong>
           <span>A second Iru tag triggers <code>collect-sudo-log.sh</code>, which ships the sudoers log to the backend. The backend uploads it as a file attachment in the original Slack approval thread.</span>
         </div>
       </div>
-      <div class="screenshot-wrap fade-in">
-        <a href="img/screenshot-session-expired.png" data-lightbox><img src="img/screenshot-session-expired.png" alt="Slack thread showing session expired and sudo log collected inline"></a>
-        <div class="screenshot-caption">On expiration, the Slack thread shows the session closed and the collected sudo log is attached inline. Every <code>sudo</code> command run during the session is visible to IT without leaving Slack.</div>
-      </div>
       <div class="flow-step">
-        <div class="step-num">7</div>
+        <div class="step-num" aria-hidden="true">7</div>
         <div class="step-text">
           <strong>IT reviews per-user risk scores on the AI dashboard (v1.2.0)</strong>
           <span>Every session log is scored by Claude Haiku 4.5 via Amazon Bedrock — evaluating actual sudo commands, not just metadata. Scores are cached 48h per user. The dashboard is served over CloudFront and accessible directly from each Slack approval message via a 30-minute session token.</span>
         </div>
       </div>
-      <div class="screenshot-wrap fade-in">
-        <a href="img/screenshot-dashboard-detail.png" data-lightbox><img src="img/screenshot-dashboard-detail.png" alt="Dashboard user detail showing AI risk score, behavioral analysis, request history table with sudo log expanded"></a>
-        <div class="screenshot-caption">The IT risk dashboard — per-user AI risk score (0–100) with a full narrative assessment, behavioral key factors, and a request history table with expandable sudo logs. Accessible directly from each Slack approval thread via a 30-minute session token.</div>
-      </div>
+    </div>
+
+    <p class="fade-in" style="font-size:13px;color:var(--text-muted);margin-bottom:.75rem">Click any screenshot to zoom. Each is labelled with the step it corresponds to.</p>
+    <div class="screenshot-gallery fade-in" role="region" aria-label="How it works — screenshots">
+      <figure class="gallery-item">
+        <a href="img/screenshot-request-form.png" data-lightbox data-caption="The compiled AppKit form — all three fields in one window. Duration uses a segmented control; category uses radio buttons, both of which work reliably under the launchctl asuser + sudo execution context." aria-label="Zoom: Request Form">
+          <img src="img/screenshot-request-form.png" alt="Admin access request form showing reason, duration, and category fields" loading="lazy">
+        </a>
+        <figcaption class="gallery-label"><span class="gallery-step">Step 1</span>Request Form</figcaption>
+      </figure>
+      <figure class="gallery-item">
+        <a href="img/screenshot-pending-alert.png" data-lightbox data-caption="After submitting, the user sees an on-device alert confirming their request is pending IT approval. They'll receive a follow-up alert and Slack DM once a decision is made." aria-label="Zoom: Pending approval alert">
+          <img src="img/screenshot-pending-alert.png" alt="On-device dialog confirming request submitted and pending IT approval" loading="lazy">
+        </a>
+        <figcaption class="gallery-label"><span class="gallery-step">Step 1</span>Pending Approval</figcaption>
+      </figure>
+      <figure class="gallery-item">
+        <a href="img/screenshot-already-admin.png" data-lightbox data-caption="If the user runs the Self Service script while already elevated, the script detects the active session and shows the remaining time — no duplicate request is created." aria-label="Zoom: Already elevated guard">
+          <img src="img/screenshot-already-admin.png" alt="On-device alert showing user already has temporary admin access with time remaining" loading="lazy">
+        </a>
+        <figcaption class="gallery-label"><span class="gallery-step">Step 1</span>Already Elevated</figcaption>
+      </figure>
+      <figure class="gallery-item">
+        <a href="img/screenshot-slack-approval.png" data-lightbox data-caption="The Slack approval card — device hostname, serial, reason, category, and requested duration all visible at a glance. The AI risk score is shown inline so IT has behavioral context before approving. IT can approve at any duration or deny outright." aria-label="Zoom: Slack approval card">
+          <img src="img/screenshot-slack-approval.png" alt="Slack approval card with AI risk score and approve/deny buttons" loading="lazy">
+        </a>
+        <figcaption class="gallery-label"><span class="gallery-step">Step 2</span>Slack Approval</figcaption>
+      </figure>
+      <figure class="gallery-item">
+        <a href="img/screenshot-pending-nudges.png" data-lightbox data-caption="If IT doesn't respond, the system sends nudge replies to the original thread at increasing intervals — every 10 minutes for the first hour, then every 60 minutes. After 24 hours with no action, the request is auto-denied." aria-label="Zoom: Pending nudge messages">
+          <img src="img/screenshot-pending-nudges.png" alt="Slack thread showing repeated nudge replies when request goes unanswered" loading="lazy">
+        </a>
+        <figcaption class="gallery-label"><span class="gallery-step">Step 2</span>Pending Nudges</figcaption>
+      </figure>
+      <figure class="gallery-item">
+        <a href="img/screenshot-auto-deny.png" data-lightbox data-caption="When no IT response arrives within 24 hours, the request is automatically closed as expired_unanswered. The thread is updated and the user is notified — excluded from AI risk scoring since no session occurred." aria-label="Zoom: Auto-denied request">
+          <img src="img/screenshot-auto-deny.png" alt="Slack message showing request expired after no IT response" loading="lazy">
+        </a>
+        <figcaption class="gallery-label"><span class="gallery-step">Step 2</span>Auto-Denied</figcaption>
+      </figure>
+      <figure class="gallery-item">
+        <a href="img/screenshot-approved-notification.png" data-lightbox data-caption="The user receives an on-device alert within seconds of IT approving. The background approval-monitor LaunchDaemon polls the backend and triggers iru run to apply the elevation tag immediately." aria-label="Zoom: Access approved notification">
+          <img src="img/screenshot-approved-notification.png" alt="On-device alert showing admin access was approved and elevation is being applied" loading="lazy">
+        </a>
+        <figcaption class="gallery-label"><span class="gallery-step">Step 3</span>Access Approved</figcaption>
+      </figure>
+      <figure class="gallery-item">
+        <a href="img/screenshot-sap-privileges.png" data-lightbox data-caption="SAP Privileges fires a macOS notification confirming the admin grant. From the user's perspective, elevation is seamless — they approve the IT request and within seconds the Privileges app quietly elevates them without any additional interaction." aria-label="Zoom: SAP Privileges granted">
+          <img src="img/screenshot-sap-privileges.png" alt="macOS notification confirming administrator privileges were granted" loading="lazy">
+        </a>
+        <figcaption class="gallery-label"><span class="gallery-step">Step 3</span>Privileges Granted</figcaption>
+      </figure>
+      <figure class="gallery-item">
+        <a href="img/screenshot-user-dm.png" data-lightbox data-caption="The user receives a Slack DM when their request is approved — with a reminder that Iru needs to check in before elevation starts. A separate DM is sent on revocation or expiry so the user always knows their current access state." aria-label="Zoom: User approval DM">
+          <img src="img/screenshot-user-dm.png" alt="Slack DM confirming admin access approved with Iru check-in reminder" loading="lazy">
+        </a>
+        <figcaption class="gallery-label"><span class="gallery-step">Step 3</span>User DM</figcaption>
+      </figure>
+      <figure class="gallery-item">
+        <a href="img/screenshot-it-controls.png" data-lightbox data-caption="After elevation is confirmed, the Slack thread updates showing the session is active with an expiry time. IT gets Revoke Access Now to immediately strip access and Lock Device to issue an MDM lock command." aria-label="Zoom: IT controls in Slack">
+          <img src="img/screenshot-it-controls.png" alt="Slack thread showing session active with expiry time and Revoke and Lock Device buttons" loading="lazy">
+        </a>
+        <figcaption class="gallery-label"><span class="gallery-step">Step 4</span>IT Controls</figcaption>
+      </figure>
+      <figure class="gallery-item">
+        <a href="img/screenshot-session-ended.png" data-lightbox data-caption="Users can end their session early from Self Service — no need to wait for the timer. The script calls /end, cancels the expiration schedules, and triggers log collection immediately." aria-label="Zoom: Session ended early">
+          <img src="img/screenshot-session-ended.png" alt="On-device dialog confirming admin session was ended early by user" loading="lazy">
+        </a>
+        <figcaption class="gallery-label"><span class="gallery-step">Step 4</span>Session Ended</figcaption>
+      </figure>
+      <figure class="gallery-item">
+        <a href="img/screenshot-5min-warning.png" data-lightbox data-caption="Five minutes before expiry, the backend posts a warning to the Slack thread and sends the user a DM. This gives them time to save work before admin access is removed." aria-label="Zoom: 5-minute warning">
+          <img src="img/screenshot-5min-warning.png" alt="Slack thread showing 5-minute warning before session expiry" loading="lazy">
+        </a>
+        <figcaption class="gallery-label"><span class="gallery-step">Step 5</span>5-Min Warning</figcaption>
+      </figure>
+      <figure class="gallery-item">
+        <a href="img/screenshot-session-expired.png" data-lightbox data-caption="On expiration, the Slack thread shows the session closed and the collected sudo log is attached inline. Every sudo command run during the session is visible to IT without leaving Slack." aria-label="Zoom: Session expired with sudo log">
+          <img src="img/screenshot-session-expired.png" alt="Slack thread showing session expired and sudo log collected inline" loading="lazy">
+        </a>
+        <figcaption class="gallery-label"><span class="gallery-step">Step 6</span>Session Expired</figcaption>
+      </figure>
+      <figure class="gallery-item">
+        <a href="img/screenshot-dashboard-detail.png" data-lightbox data-caption="The IT risk dashboard — per-user AI risk score (0–100) with a full narrative assessment, behavioral key factors, and a request history table with expandable sudo logs. Accessible directly from each Slack approval thread." aria-label="Zoom: IT risk dashboard">
+          <img src="img/screenshot-dashboard-detail.png" alt="Dashboard showing AI risk score, behavioral analysis, and request history" loading="lazy">
+        </a>
+        <figcaption class="gallery-label"><span class="gallery-step">Step 7</span>Risk Dashboard</figcaption>
+      </figure>
     </div>
 
     <!-- ARCHITECTURE -->
@@ -922,9 +1057,10 @@ HTTP_STATUS=$(curl -s -o "$ELEVATION_RESPONSE_FILE" -w "%{http_code}" \
 
 </div>
 
-<div id="lightbox" role="dialog" aria-modal="true">
-  <span id="lightbox-close" aria-label="Close">&#x2715;</span>
+<div id="lightbox" role="dialog" aria-modal="true" aria-label="Screenshot viewer">
+  <button id="lightbox-close" aria-label="Close image viewer">&#x2715;</button>
   <img id="lightbox-img" src="" alt="">
+  <div id="lightbox-caption" aria-live="polite"></div>
 </div>
 
 <footer>
@@ -937,13 +1073,15 @@ HTTP_STATUS=$(curl -s -o "$ELEVATION_RESPONSE_FILE" -w "%{http_code}" \
   const lightboxImg  = document.getElementById('lightbox-img');
   const lightboxClose = document.getElementById('lightbox-close');
 
-  document.querySelectorAll('.screenshot-wrap a[data-lightbox]').forEach(a => {
+  document.querySelectorAll('a[data-lightbox]').forEach(a => {
     a.addEventListener('click', e => {
       e.preventDefault();
       lightboxImg.src = a.href;
       lightboxImg.alt = a.querySelector('img').alt;
+      document.getElementById('lightbox-caption').textContent = a.dataset.caption || '';
       lightbox.classList.add('open');
       document.body.style.overflow = 'hidden';
+      lightboxClose.focus();
     });
   });
 
