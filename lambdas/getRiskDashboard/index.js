@@ -18,6 +18,12 @@ exports.handler = async (event) => {
       if (tokenRecord.firstUsedAt && (Date.now() - tokenRecord.firstUsedAt) > SESSION_WINDOW_MS) {
         return respond(403, { error: 'This link has expired. Request a new approval to get a fresh link.' });
       }
+      // Scope token to the user it was issued for — prevent one user's token from
+      // being used to view another user's data via the ?user= query parameter.
+      const requestedUser = event.queryStringParameters?.user;
+      if (requestedUser && tokenRecord.username && requestedUser !== tokenRecord.username) {
+        return respond(403, { error: 'Token not valid for this user' });
+      }
       await dynamo.markDashboardTokenFirstUsed(token);
     } else {
       return respond(401, { error: 'Unauthorized' });
@@ -37,12 +43,14 @@ exports.handler = async (event) => {
       scoresByUser[s.username] = s;
     }
 
-    // Group requests by user
+    // Group requests by user — include logContent only for single-user detail views,
+    // not the full scan, to avoid returning bulk log data to dashboard overviews.
+    const includeLogContent = !!userFilter;
     const requestsByUser = {};
     for (const r of allRequests) {
       const u = r.requestingUser || 'unknown';
       if (!requestsByUser[u]) requestsByUser[u] = [];
-      requestsByUser[u].push(sanitizeRequest(r));
+      requestsByUser[u].push(sanitizeRequest(r, includeLogContent));
     }
 
     // If filtering to one user, return detailed view
@@ -97,8 +105,9 @@ exports.handler = async (event) => {
   }
 };
 
-// Strip Slack-internal fields but include log content for dashboard display
-function sanitizeRequest(r) {
+// Strip Slack-internal fields. logContent is only included for single-user detail views
+// (includeLogContent=true) — omit it from full-scan responses to limit bulk data exposure.
+function sanitizeRequest(r, includeLogContent = false) {
   return {
     requestId: r.requestId,
     createdAt: r.createdAt,
@@ -114,7 +123,7 @@ function sanitizeRequest(r) {
     revokedEarly: r.revokedEarly || false,
     revokedByNetworkLoss: r.revokedByNetworkLoss || false,
     lockedByIT: r.lockedByIT || false,
-    logContent: r.logContent || null
+    logContent: includeLogContent ? (r.logContent || null) : undefined
   };
 }
 

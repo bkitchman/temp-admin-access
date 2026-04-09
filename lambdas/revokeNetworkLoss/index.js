@@ -45,12 +45,9 @@ exports.handler = async (event) => {
       return respond(200, { message: 'Already handled' });
     }
 
-    // Remove elevation tag and assign log collection tag.
-    // The network monitor on the device calls `iru run` to pick up the tag immediately.
-    await iru.removeElevationTag(request.iruDeviceId);
-    await iru.assignLogCollectionTag(request.iruDeviceId);
-
     // N4-05: conditional write — only expire if still approved (prevents double-revoke race)
+    // Perform the DynamoDB write BEFORE mutating Iru tags so we don't remove access
+    // and then fail to record the revocation (leaving state inconsistent).
     try {
       await dynamo.updateRequest(requestId, {
         status: 'expired',
@@ -69,6 +66,11 @@ exports.handler = async (event) => {
       }
       throw err;
     }
+
+    // Remove elevation tag and assign log collection tag — only after successful write.
+    // The network monitor on the device calls `iru run` to pick up the tag immediately.
+    await iru.removeElevationTag(request.iruDeviceId);
+    await iru.assignLogCollectionTag(request.iruDeviceId);
 
     // N4-09: escape user-controlled fields before embedding in Slack messages
     const safeUser = slack.escapeSlack(request.requestingUser);

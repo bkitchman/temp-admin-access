@@ -92,6 +92,14 @@ exports.handler = async (event) => {
       return respond(400, { error: 'Invalid serial number format' });
     }
 
+    // Validate character allowlists for username and hostname
+    if (!/^[a-zA-Z0-9._-]{1,64}$/.test(username)) {
+      return respond(400, { error: 'Invalid username format' });
+    }
+    if (!/^[a-zA-Z0-9._-]{1,255}$/.test(hostname)) {
+      return respond(400, { error: 'Invalid hostname format' });
+    }
+
     // Validate email format if provided
     if (email && !isValidEmail(email)) {
       return respond(400, { error: 'Invalid email format' });

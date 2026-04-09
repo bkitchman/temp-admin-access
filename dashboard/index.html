@@ -378,11 +378,11 @@
             <span>🕐 Last: ${lastSeen}</span>
           </div>
         </div>
-        ${score ? `<div style="color:${scoreColor};font-size:22px;font-weight:700;margin-left:auto;margin-right:8px">${scoreNum}</div>` : ''}
+        ${score ? `<div style="color:${scoreColor};font-size:22px;font-weight:700;margin-left:auto;margin-right:8px">${esc(scoreNum)}</div>` : ''}
         <div>${badge}</div>
         <div class="chevron">▼</div>
       </div>
-      <div class="user-detail" id="detail-${esc(u.username)}">
+      <div class="user-detail" id="detail-${safeId(u.username)}">
         <div style="color:var(--text-muted);font-size:13px;padding:14px 0"><div class="spinner"></div> Loading history…</div>
       </div>
     </div>`;
@@ -403,7 +403,7 @@
     expandedUser = username;
     card.classList.add('expanded');
 
-    const detailEl = document.getElementById(`detail-${username}`);
+    const detailEl = document.getElementById(`detail-${safeId(username)}`);
     if (userDetailCache[username]) {
       detailEl.innerHTML = renderUserDetail(userDetailCache[username]);
       return;
@@ -428,7 +428,7 @@
       const scoreColor = riskColor(score.level);
       html += `<div class="risk-summary" style="display:flex;gap:16px;align-items:flex-start">
         <div style="text-align:center;flex-shrink:0;background:var(--surface);border:2px solid ${scoreColor};border-radius:10px;padding:12px 18px;min-width:80px">
-          <div style="font-size:32px;font-weight:800;color:${scoreColor};line-height:1">${score.score}</div>
+          <div style="font-size:32px;font-weight:800;color:${scoreColor};line-height:1">${esc(score.score)}</div>
           <div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-top:4px">/ 100</div>
           <div style="margin-top:8px">${riskBadge(score.level, '')}</div>
         </div>
@@ -436,7 +436,7 @@
           <h4 style="margin-bottom:6px">AI Risk Assessment</h4>
           ${score.summary ? `<p style="font-size:13px;margin-bottom:8px">${esc(score.summary)}</p>` : ''}
           ${score.keyFactors?.length ? `<ul class="key-factors">${score.keyFactors.map(f => `<li>${esc(f)}</li>`).join('')}</ul>` : ''}
-          <p style="font-size:11px;color:var(--text-muted);margin-top:8px">Last evaluated ${score.lastEvaluatedAt ? relativeTime(score.lastEvaluatedAt) : 'unknown'} · ${score.requestCount ?? '?'} requests analyzed</p>
+          <p style="font-size:11px;color:var(--text-muted);margin-top:8px">Last evaluated ${score.lastEvaluatedAt ? relativeTime(score.lastEvaluatedAt) : 'unknown'} · ${esc(score.requestCount ?? '?')} requests analyzed</p>
         </div>
       </div>`;
     } else {
@@ -483,7 +483,7 @@
             <td style="white-space:nowrap;color:var(--text-muted)">${formatDate(r.createdAt)}</td>
             <td>${esc(r.deviceHostname || r.deviceSerial || '—')}</td>
             <td>${esc(categoryLabel(r.reasonCategory))}</td>
-            <td>${r.requestedDuration ? `${r.requestedDuration}m` : '—'}${r.approvedDuration && r.approvedDuration !== r.requestedDuration ? ` → ${r.approvedDuration}m` : ''}</td>
+            <td>${r.requestedDuration ? `${esc(r.requestedDuration)}m` : '—'}${r.approvedDuration && r.approvedDuration !== r.requestedDuration ? ` → ${esc(r.approvedDuration)}m` : ''}</td>
             <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.reason || '')}">${esc((r.reason || '').slice(0, 80))}${r.reason?.length > 80 ? '…' : ''}</td>
             <td><span class="status-pill ${statusClass}">${statusLabel}</span></td>
             <td>${hasLog ? `<button class="log-toggle" onclick="toggleLog('${esc(r.requestId)}')">View</button>` : '<span style="color:var(--text-muted);font-size:11px">—</span>'}</td>
@@ -547,6 +547,13 @@
 
   function esc(str) {
     return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;').replace(/`/g,'&#x60;');
+  }
+
+  // safeId — converts a string to a value safe for use as an HTML element ID.
+  // Replaces any character outside [a-zA-Z0-9_-] with _<charCode>_ so that
+  // getElementById() always finds the element regardless of special chars in usernames.
+  function safeId(s) {
+    return String(s || '').replace(/[^a-zA-Z0-9_-]/g, c => '_' + c.charCodeAt(0) + '_');
   }
 
   // ─── Init ─────────────────────────────────────────────────────────────────────

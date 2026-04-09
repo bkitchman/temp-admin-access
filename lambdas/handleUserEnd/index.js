@@ -7,6 +7,7 @@ const iru = require('../shared/iru');
 const slack = require('../shared/slack');
 const dynamo = require('../shared/dynamo');
 const scheduler = require('../shared/scheduler');
+const { isValidUUID } = require('../shared/validate');
 
 exports.handler = async (event) => {
   // 1. Validate API key
@@ -27,6 +28,8 @@ exports.handler = async (event) => {
   if (!requestId || !serial) {
     return respond(400, { error: 'Missing required fields: requestId, serial' });
   }
+
+  if (!isValidUUID(requestId)) return respond(400, { error: 'Invalid requestId format' });
 
   if (!/^[A-Z0-9]{8,14}$/.test(serial)) {
     return respond(400, { error: 'Invalid serial format' });

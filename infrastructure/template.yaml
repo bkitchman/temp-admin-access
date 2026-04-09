@@ -255,6 +255,9 @@ Resources:
               Service: cloudfront.amazonaws.com
             Action: s3:GetObject
             Resource: !Sub '${DashboardBucket.Arn}/*'
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${DashboardDistribution}'
 
   # -------------------------------------------------------------------------
   # CloudFront Origin Access Control — allows CloudFront to read the S3 bucket
@@ -268,6 +271,31 @@ Resources:
         OriginAccessControlOriginType: s3
         SigningBehavior: always
         SigningProtocol: sigv4
+
+  # -------------------------------------------------------------------------
+  # CloudFront Response Headers Policy — adds security headers to all responses
+  # -------------------------------------------------------------------------
+  DashboardSecurityHeadersPolicy:
+    Type: AWS::CloudFront::ResponseHeadersPolicy
+    Properties:
+      ResponseHeadersPolicyConfig:
+        Name: !Sub 'admin-access-dashboard-security-headers-${AWS::StackName}'
+        SecurityHeadersConfig:
+          ContentSecurityPolicy:
+            ContentSecurityPolicy: "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src https:; img-src 'self' data:; frame-ancestors 'none';"
+            Override: true
+          FrameOptions:
+            FrameOption: DENY
+            Override: true
+          ContentTypeOptions:
+            Override: true
+          ReferrerPolicy:
+            ReferrerPolicy: strict-origin-when-cross-origin
+            Override: true
+          StrictTransportSecurity:
+            AccessControlMaxAgeSec: 63072000
+            IncludeSubdomains: true
+            Override: true
 
   # -------------------------------------------------------------------------
   # CloudFront distribution — serves the dashboard over HTTPS
@@ -287,6 +315,7 @@ Resources:
           # AWS managed cache policy: CachingDisabled — dashboard should always be current
           CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
           Compress: true
+          ResponseHeadersPolicyId: !Ref DashboardSecurityHeadersPolicy
         Origins:
           - Id: DashboardS3Origin
             DomainName: !GetAtt DashboardBucket.RegionalDomainName
@@ -501,7 +530,7 @@ Resources:
       FunctionName: !GetAtt SendWarningFunction.Arn
       Action: lambda:InvokeFunction
       Principal: scheduler.amazonaws.com
-      SourceArn: !Sub 'arn:aws:scheduler:${AWS::Region}:${AWS::AccountId}:schedule/default/*'
+      SourceArn: !Sub 'arn:aws:scheduler:${AWS::Region}:${AWS::AccountId}:schedule/default/warning-*'
 
   # -------------------------------------------------------------------------
   # Lambda: handleExpiration  (EventBridge Scheduler T+30 min)
@@ -528,7 +557,7 @@ Resources:
       FunctionName: !GetAtt HandleExpirationFunction.Arn
       Action: lambda:InvokeFunction
       Principal: scheduler.amazonaws.com
-      SourceArn: !Sub 'arn:aws:scheduler:${AWS::Region}:${AWS::AccountId}:schedule/default/*'
+      SourceArn: !Sub 'arn:aws:scheduler:${AWS::Region}:${AWS::AccountId}:schedule/default/expiration-*'
 
   # -------------------------------------------------------------------------
   # Lambda: handlePendingNudge  (EventBridge Scheduler — nudge pending requests)
@@ -569,7 +598,7 @@ Resources:
       FunctionName: !GetAtt HandlePendingNudgeFunction.Arn
       Action: lambda:InvokeFunction
       Principal: scheduler.amazonaws.com
-      SourceArn: !Sub 'arn:aws:scheduler:${AWS::Region}:${AWS::AccountId}:schedule/default/*'
+      SourceArn: !Sub 'arn:aws:scheduler:${AWS::Region}:${AWS::AccountId}:schedule/default/nudge-*'
 
   # -------------------------------------------------------------------------
   # Lambda: revokeNetworkLoss  POST /revoke-network-loss
@@ -738,11 +767,6 @@ Resources:
                 - !Sub 'arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.anthropic.*'
                 # Underlying foundation models across all US regions
                 - 'arn:aws:bedrock:*::foundation-model/anthropic.*'
-            - Effect: Allow
-              Action:
-                - aws-marketplace:ViewSubscriptions
-                - aws-marketplace:Subscribe
-              Resource: '*'
 
   # -------------------------------------------------------------------------
   # Lambda: getRiskDashboard  GET /dashboard

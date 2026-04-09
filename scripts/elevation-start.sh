@@ -329,6 +329,11 @@ fi
 # ---------------------------------------------------------------------------
 # Install network monitor LaunchDaemon — revokes access if network drops
 # or if IT has revoked access early via the backend
+#
+# NOTE: scripts/network-monitor.sh was the old standalone version of this logic.
+# It has been removed — the monitor is now written inline here as a heredoc so
+# runtime values (REQUEST_ID, SERIAL, API endpoints) can be interpolated at
+# install time. Do not restore network-monitor.sh; maintain this inline daemon.
 # ---------------------------------------------------------------------------
 MONITOR_SCRIPT="/usr/local/bin/iru-admin-network-monitor.sh"
 PLIST_PATH="/Library/LaunchDaemons/com.kitchman.admin-network-monitor.plist"

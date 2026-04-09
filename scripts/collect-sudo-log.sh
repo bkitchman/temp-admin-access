@@ -13,6 +13,8 @@ if ! command -v timeout &>/dev/null; then
   timeout() { local _t=$1; shift; "$@"; }
 fi
 
+ts() { date '+%Y-%m-%d %H:%M:%S'; }
+
 API_ENDPOINT="https://1mng27frfb.execute-api.us-east-1.amazonaws.com/Prod/log"
 API_KEY=$(security find-generic-password -a "iru-temp-admin" -s "iru-temp-admin-api" -w /Library/Keychains/System.keychain 2>/dev/null)
 if [ -z "$API_KEY" ]; then
@@ -20,8 +22,6 @@ if [ -z "$API_KEY" ]; then
   exit 1
 fi
 META_FILE="/var/root/.iru-elevation/meta.json"
-
-ts() { date '+%Y-%m-%d %H:%M:%S'; }
 
 # ---------------------------------------------------------------------------
 # Read metadata written at request and elevation-start time

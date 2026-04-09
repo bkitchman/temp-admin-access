@@ -70,12 +70,16 @@ fi
 RESPONSE_FILE=$(mktemp /tmp/iru-end-XXXXXX)
 chmod 600 "$RESPONSE_FILE"
 
+# N8-05: build POST body via python3 json.dumps — structurally safe regardless of
+# special characters in REQUEST_ID or SERIAL; avoids shell interpolation into JSON.
+JSON_BODY=$(python3 -c "import json,sys; print(json.dumps({'requestId': sys.argv[1], 'serial': sys.argv[2]}))" "$REQUEST_ID" "$SERIAL")
+
 HTTP_CODE=$(curl -s -o "$RESPONSE_FILE" -w "%{http_code}" \
   -X POST \
   -H "Content-Type: application/json" \
   -H "x-api-key: $API_KEY" \
   --max-time 15 \
-  -d "{\"requestId\":\"$REQUEST_ID\",\"serial\":\"$SERIAL\"}" \
+  -d "$JSON_BODY" \
   "$END_ENDPOINT" 2>/dev/null)
 
 echo "Response HTTP $HTTP_CODE: $(cat "$RESPONSE_FILE")"
