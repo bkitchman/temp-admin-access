@@ -387,8 +387,16 @@
         </div>
       </div>
       <div class="screenshot-wrap fade-in">
-        <img src="img/screenshot-request-form.jpg" alt="Single-screen AppKit request form showing reason, duration, and category fields">
+        <img src="img/screenshot-request-form.png" alt="Single-screen AppKit request form showing reason, duration, and category fields">
         <div class="screenshot-caption">The compiled AppKit form — all three fields in one window. Duration uses a segmented control; category uses radio buttons, both of which work reliably under the <code>launchctl asuser + sudo</code> execution context.</div>
+      </div>
+      <div class="screenshot-wrap fade-in">
+        <img src="img/screenshot-pending-alert.png" alt="On-device alert confirming the admin access request was submitted and is pending IT approval">
+        <div class="screenshot-caption">After submitting, the user sees an on-device alert confirming their request is pending IT approval. They'll receive a follow-up alert and Slack DM once a decision is made.</div>
+      </div>
+      <div class="screenshot-wrap fade-in">
+        <img src="img/screenshot-already-admin.png" alt="On-device alert showing the user already has temporary admin access with time remaining">
+        <div class="screenshot-caption">If the user runs the Self Service script while already elevated, the script detects the active session and shows the remaining time — no duplicate request is created.</div>
       </div>
       <div class="flow-step">
         <div class="step-num">2</div>
@@ -398,8 +406,16 @@
         </div>
       </div>
       <div class="screenshot-wrap fade-in">
-        <img src="img/screenshot-slack-approval.jpg" alt="Slack approval card showing full request details and approve/deny buttons">
-        <div class="screenshot-caption">The Slack approval card — device hostname, serial, reason, category, and requested duration all visible at a glance. IT can approve at any duration or deny outright.</div>
+        <img src="img/screenshot-slack-approval.png" alt="Slack approval card showing full request details, AI risk score, and approve/deny buttons">
+        <div class="screenshot-caption">The Slack approval card — device hostname, serial, reason, category, and requested duration all visible at a glance. The AI risk score is shown inline so IT has behavioral context before approving. IT can approve at any duration or deny outright.</div>
+      </div>
+      <div class="screenshot-wrap fade-in">
+        <img src="img/screenshot-pending-nudges.png" alt="Slack thread showing repeated nudge replies when an IT approval request goes unanswered">
+        <div class="screenshot-caption">If IT doesn't respond, the system sends nudge replies to the original thread at increasing intervals — every 10 minutes for the first hour, then every 60 minutes. After 24 hours with no action, the request is auto-denied and the thread is updated.</div>
+      </div>
+      <div class="screenshot-wrap fade-in">
+        <img src="img/screenshot-auto-deny.png" alt="Slack message showing the request expired after 1 hour with no IT response">
+        <div class="screenshot-caption">When no IT response arrives within 24 hours (1 hour in testing mode), the request is automatically closed as <code>expired_unanswered</code>. The thread is updated and the user is notified — these requests are excluded from AI risk scoring since no session actually occurred.</div>
       </div>
       <div class="flow-step">
         <div class="step-num">3</div>
@@ -409,8 +425,16 @@
         </div>
       </div>
       <div class="screenshot-wrap fade-in">
-        <img src="img/screenshot-approved-notification.jpg" alt="Device notification showing admin access approved, with Slack thread visible in background">
-        <div class="screenshot-caption">The user receives an on-device alert within seconds of IT approving. The background approval-monitor LaunchDaemon polls the backend and triggers <code>kandji run</code> to apply the elevation tag immediately.</div>
+        <img src="img/screenshot-approved-notification.png" alt="On-device alert showing admin access was approved and elevation is being applied">
+        <div class="screenshot-caption">The user receives an on-device alert within seconds of IT approving. The background approval-monitor LaunchDaemon polls the backend and triggers <code>iru run</code> to apply the elevation tag immediately.</div>
+      </div>
+      <div class="screenshot-wrap fade-in">
+        <img src="img/screenshot-sap-privileges.png" alt="macOS SAP Privileges notification confirming administrator privileges were successfully granted">
+        <div class="screenshot-caption">SAP Privileges fires a macOS notification confirming the admin grant. From the user's perspective, elevation is seamless — they approve the IT request and within seconds the Privileges app quietly elevates them without any additional interaction.</div>
+      </div>
+      <div class="screenshot-wrap fade-in">
+        <img src="img/screenshot-user-dm.png" alt="Slack DM sent to the user confirming their admin access was approved and later revoked">
+        <div class="screenshot-caption">The user receives a Slack DM when their request is approved — with a reminder that Iru needs to check in before elevation starts. A separate DM is sent on revocation or expiry so the user always knows their current access state.</div>
       </div>
       <div class="flow-step">
         <div class="step-num">4</div>
@@ -420,8 +444,12 @@
         </div>
       </div>
       <div class="screenshot-wrap fade-in">
-        <img src="img/screenshot-it-controls.jpg" alt="Slack thread showing IT controls — Revoke Now and Lock Device buttons">
-        <div class="screenshot-caption">After elevation is confirmed, the Slack thread updates with IT controls: <strong>Revoke Now</strong> immediately strips access, <strong>Lock Device</strong> issues an MDM lock command. The thread becomes a full audit trail for the session.</div>
+        <img src="img/screenshot-it-controls.png" alt="Slack thread showing approval confirmed, access active with expiry time, and Revoke Now and Lock Device buttons">
+        <div class="screenshot-caption">After elevation is confirmed, the Slack thread updates showing the session is active with an expiry time. IT gets <strong>Revoke Access Now</strong> to immediately strip access and <strong>Lock Device</strong> to issue an MDM lock command. The thread becomes a full audit trail for the session.</div>
+      </div>
+      <div class="screenshot-wrap fade-in">
+        <img src="img/screenshot-session-ended.png" alt="On-device alert confirming the user ended their admin session early via Self Service">
+        <div class="screenshot-caption">Users can end their session early from Self Service — no need to wait for the timer. The script calls <code>/end</code>, cancels the expiration schedules, and triggers log collection immediately. IT sees the thread updated with elapsed time.</div>
       </div>
       <div class="flow-step">
         <div class="step-num">5</div>
@@ -429,6 +457,10 @@
           <strong>EventBridge sends a 5-minute warning DM, then fires expiration at T+N</strong>
           <span>Timers are anchored to when the <em>device</em> confirms elevation — not when IT clicks Approve. The user always gets the full approved duration. The warning DM is skipped entirely for 5-minute sessions (a T+0 warning would be instant noise).</span>
         </div>
+      </div>
+      <div class="screenshot-wrap fade-in">
+        <img src="img/screenshot-5min-warning.png" alt="Slack thread showing 5-minute warning sent to the user before session expiry">
+        <div class="screenshot-caption">Five minutes before expiry, the backend posts a warning to the Slack thread and sends the user a DM. This gives them time to save work before admin access is removed.</div>
       </div>
       <div class="flow-step">
         <div class="step-num">6</div>
@@ -438,8 +470,8 @@
         </div>
       </div>
       <div class="screenshot-wrap fade-in">
-        <img src="img/screenshot-network-revocation.jpg" alt="Slack thread showing access revoked by IT and sudo log collected">
-        <div class="screenshot-caption">On expiration or revocation, the Slack thread shows the final status and the collected sudo log is attached inline. Every <code>sudo</code> command the user ran during the session is visible to IT without leaving Slack.</div>
+        <img src="img/screenshot-session-expired.png" alt="Slack thread showing session expired and sudo log collected inline">
+        <div class="screenshot-caption">On expiration, the Slack thread shows the session closed and the collected sudo log is attached inline. Every <code>sudo</code> command run during the session is visible to IT without leaving Slack.</div>
       </div>
       <div class="flow-step">
         <div class="step-num">7</div>
@@ -450,7 +482,11 @@
       </div>
       <div class="screenshot-wrap fade-in">
         <img src="img/screenshot-dashboard.png" alt="IT admin risk dashboard showing per-user AI risk scores, request history, and sudo log detail">
-        <div class="screenshot-caption">The IT risk dashboard — per-user AI risk score (0–100), behavioral key factors, full request history with sudo log viewer, and stats including approvals, denials, and unanswered requests. Accessible directly from the Slack approval thread.</div>
+        <div class="screenshot-caption">The IT risk dashboard — per-user AI risk scores, request counts, and risk filter badges at a glance. Click any user to drill into their full request history, AI assessment, and behavioral key factors.</div>
+      </div>
+      <div class="screenshot-wrap fade-in">
+        <img src="img/screenshot-dashboard-detail.png" alt="Dashboard user detail showing AI risk score of 68 High, behavioral analysis, request history table with sudo log expanded">
+        <div class="screenshot-caption">The per-user detail view — a 0–100 AI risk score with full narrative assessment, behavioral key factors, and a request history table with expandable sudo logs. Requests are color-coded by status so IT can spot patterns at a glance.</div>
       </div>
     </div>
 

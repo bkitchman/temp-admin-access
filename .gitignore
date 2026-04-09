@@ -8,6 +8,9 @@ infrastructure/.aws-sam/
 .DS_Store
 **/.DS_Store
 
+# Raw timestamped screenshots (only clean-named copies are committed)
+posts/temp-admin-access/img/Screenshot*.png
+
 # Secrets — never commit real values
 samconfig.toml
 
