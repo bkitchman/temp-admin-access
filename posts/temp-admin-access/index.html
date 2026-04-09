@@ -761,41 +761,69 @@ HTTP_STATUS=$(curl -s -o "$ELEVATION_RESPONSE_FILE" -w "%{http_code}" \
 
     <!-- COST -->
     <h2 id="cost">What Does It Cost?</h2>
-    <p class="fade-in">Fully serverless means you only pay for what runs. At typical usage the entire stack costs under a dollar a month — Lambda and EventBridge stay within the permanent free tier, and Bedrock (the AI risk scoring) is the only real line item.</p>
+    <p class="fade-in">Fully serverless means you only pay for what runs. Lambda and EventBridge stay within the permanent free tier at all realistic volumes — Bedrock (AI risk scoring) is the only real line item. Estimates below are based on typical request frequency by team size: engineers average 2–3 sudo sessions per day when they need access, but most engineers only need it a few times a month. A 30-minute window often covers 8–15 sudo commands, which slightly increases Bedrock token cost per session but doesn't change call count.</p>
 
     <div class="fade-in" style="background:var(--bg-card,#fff);border:1px solid var(--border);border-radius:12px;padding:28px 24px;margin:24px 0">
-      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:24px">
-        <div style="flex:1;min-width:120px;background:var(--bg,#f8fafc);border-radius:8px;padding:16px">
-          <div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:4px">100 req/mo</div>
-          <div id="blog-cost-100" style="font-size:26px;font-weight:700">—</div>
+
+      <!-- stat cards -->
+      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:28px">
+        <div style="flex:1;min-width:130px;background:var(--bg,#f8fafc);border-radius:8px;padding:16px">
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:4px">5 engineers</div>
+          <div id="blog-cost-5eng" style="font-size:26px;font-weight:700">—</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:4px">~35 req/mo</div>
         </div>
-        <div style="flex:1;min-width:120px;background:rgba(6,182,212,.07);border:1px solid rgba(6,182,212,.2);border-radius:8px;padding:16px">
-          <div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:4px">1k req/mo</div>
-          <div id="blog-cost-1000" style="font-size:26px;font-weight:700;color:var(--accent)">—</div>
+        <div style="flex:1;min-width:130px;background:rgba(6,182,212,.07);border:1px solid rgba(6,182,212,.2);border-radius:8px;padding:16px">
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:4px">20 engineers</div>
+          <div id="blog-cost-20eng" style="font-size:26px;font-weight:700;color:var(--accent)">—</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:4px">~100 req/mo</div>
         </div>
-        <div style="flex:1;min-width:120px;background:var(--bg,#f8fafc);border-radius:8px;padding:16px">
-          <div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:4px">10k req/mo</div>
-          <div id="blog-cost-10000" style="font-size:26px;font-weight:700">—</div>
+        <div style="flex:1;min-width:130px;background:var(--bg,#f8fafc);border-radius:8px;padding:16px">
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:4px">100 engineers</div>
+          <div id="blog-cost-100eng" style="font-size:26px;font-weight:700">—</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:4px">~350 req/mo</div>
         </div>
-        <div style="flex:1;min-width:120px;background:var(--bg,#f8fafc);border-radius:8px;padding:16px">
-          <div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:4px">20k req/mo</div>
-          <div id="blog-cost-20000" style="font-size:26px;font-weight:700">—</div>
+        <div style="flex:1;min-width:130px;background:var(--bg,#f8fafc);border-radius:8px;padding:16px">
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:4px">250 engineers</div>
+          <div id="blog-cost-250eng" style="font-size:26px;font-weight:700">—</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:4px">~625 req/mo</div>
         </div>
       </div>
 
-      <div style="position:relative;height:260px">
-        <canvas id="blogCostChart"></canvas>
-      </div>
+      <!-- chart + table side by side -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:28px;align-items:start">
+        <div>
+          <div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:.05em">Monthly cost by team size</div>
+          <div style="position:relative;height:240px">
+            <canvas id="blogCostChart"></canvas>
+          </div>
+          <div style="margin-top:12px;display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--text-muted)">
+            <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#f87171;margin-right:4px;vertical-align:middle"></span>Bedrock</span>
+            <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#34d399;margin-right:4px;vertical-align:middle"></span>API Gateway</span>
+            <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#60a5fa;margin-right:4px;vertical-align:middle"></span>DynamoDB</span>
+          </div>
+        </div>
 
-      <div style="margin-top:16px;display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--text-muted)">
-        <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#f87171;margin-right:4px;vertical-align:middle"></span>Bedrock (AI scoring)</span>
-        <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#34d399;margin-right:4px;vertical-align:middle"></span>API Gateway</span>
-        <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#60a5fa;margin-right:4px;vertical-align:middle"></span>DynamoDB</span>
-        <span style="color:var(--text-light)">Lambda, EventBridge, CloudFront: within free tier at all volumes shown</span>
+        <div>
+          <div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:.05em">Cost breakdown</div>
+          <table id="costTable" style="width:100%;border-collapse:collapse;font-size:13px">
+            <thead>
+              <tr style="border-bottom:2px solid var(--border)">
+                <th style="text-align:left;padding:7px 8px;font-weight:600;color:var(--text-muted)">Team</th>
+                <th style="text-align:right;padding:7px 8px;font-weight:600;color:#f87171">Bedrock</th>
+                <th style="text-align:right;padding:7px 8px;font-weight:600;color:#34d399">API GW</th>
+                <th style="text-align:right;padding:7px 8px;font-weight:600;color:#60a5fa">Dynamo</th>
+                <th style="text-align:right;padding:7px 8px;font-weight:600">Total</th>
+              </tr>
+            </thead>
+            <tbody id="costTableBody">
+            </tbody>
+          </table>
+          <div style="margin-top:10px;font-size:11px;color:var(--text-muted)">Lambda, EventBridge &amp; CloudFront remain within the permanent free tier at all volumes shown.</div>
+        </div>
       </div>
     </div>
 
-    <p class="fade-in" style="font-size:14px;color:var(--text-muted)">Bedrock is ~95% of cost because every session triggers a Claude Haiku 4.5 risk re-score after the sudo log arrives. Scores are cached 48h per user, so repeat users reduce this further. The pending-request nudge system (Slack reminders every 10 min for 1 hr, then hourly for 24 hr) adds ~5 Lambda invocations and ~5 EventBridge schedules per request on average — both stay within the permanent free tier even at 20k req/month. See <a href="https://github.com/bkitchman/temp-admin-access/blob/master/docs/cost-estimate.html">full cost breakdown →</a></p>
+    <p class="fade-in" style="font-size:14px;color:var(--text-muted)">Bedrock is ~95% of total cost because every completed session triggers a Claude Haiku 4.5 risk re-score. Scores are cached 48h per user, so frequent users cost less over time. Requests that expire unanswered (<code>expired_unanswered</code>) are never scored — no session, no cost. See <a href="https://github.com/bkitchman/temp-admin-access/blob/master/docs/cost-estimate.html">full cost breakdown →</a></p>
 
     <!-- VERSION HISTORY -->
     <h2 id="version-history">Version History</h2>
@@ -980,8 +1008,8 @@ HTTP_STATUS=$(curl -s -o "$ELEVATION_RESPONSE_FILE" -w "%{http_code}" \
   (function() {
     const BEDROCK_INPUT_PER_1K  = 0.0008;   // Claude Haiku 4.5
     const BEDROCK_OUTPUT_PER_1K = 0.004;    // Claude Haiku 4.5
-    const BEDROCK_INPUT_TOKENS  = 2500;
-    const BEDROCK_OUTPUT_TOKENS = 250;
+    const BEDROCK_INPUT_TOKENS  = 3200;     // avg 8-15 sudo cmds per 30-min session
+    const BEDROCK_OUTPUT_TOKENS = 280;
     const API_GW_PER_MILLION    = 3.50;
     const API_CALLS_PER_REQ     = 10;
     const DYNAMO_WRITE_PER_M    = 1.25;
@@ -1000,15 +1028,39 @@ HTTP_STATUS=$(curl -s -o "$ELEVATION_RESPONSE_FILE" -w "%{http_code}" \
       return { bedrock, api, dynamo, total: bedrock + api + dynamo };
     }
 
-    const volumes = [100, 1000, 5000, 10000, 20000];
-    const labels  = ['100', '1k', '5k', '10k', '20k'];
-    const data    = volumes.map(calcCosts);
+    // Team-size based estimates
+    const teams = [
+      { label: '5 eng',  requests: 35,  engCount: 5   },
+      { label: '20 eng', requests: 100, engCount: 20  },
+      { label: '100 eng',requests: 350, engCount: 100 },
+      { label: '250 eng',requests: 625, engCount: 250 },
+    ];
+    const data = teams.map(t => ({ ...t, ...calcCosts(t.requests) }));
 
-    const fmt = n => n < 0.01 ? '<$0.01' : '$' + n.toFixed(2);
-    document.getElementById('blog-cost-100').textContent   = fmt(data[0].total);
-    document.getElementById('blog-cost-1000').textContent  = fmt(data[1].total);
-    document.getElementById('blog-cost-10000').textContent = fmt(data[3].total);
-    document.getElementById('blog-cost-20000').textContent = fmt(data[4].total);
+    const fmt     = n => n < 0.01 ? '<$0.01' : '$' + n.toFixed(2);
+    const fmtFull = n => n < 0.001 ? '<$0.001' : '$' + n.toFixed(3);
+
+    document.getElementById('blog-cost-5eng').textContent   = fmt(data[0].total);
+    document.getElementById('blog-cost-20eng').textContent  = fmt(data[1].total);
+    document.getElementById('blog-cost-100eng').textContent = fmt(data[2].total);
+    document.getElementById('blog-cost-250eng').textContent = fmt(data[3].total);
+
+    // Populate table
+    const tbody = document.getElementById('costTableBody');
+    data.forEach((d, i) => {
+      const perEng = d.total / d.engCount;
+      const highlight = i === 1;
+      const rowStyle = highlight
+        ? 'background:rgba(6,182,212,.06);border-radius:6px'
+        : 'border-bottom:1px solid var(--border)';
+      tbody.innerHTML += `<tr style="${rowStyle}">
+        <td style="padding:7px 8px;font-weight:600">${d.label}</td>
+        <td style="text-align:right;padding:7px 8px;color:#f87171">${fmtFull(d.bedrock)}</td>
+        <td style="text-align:right;padding:7px 8px;color:#34d399">${fmtFull(d.api)}</td>
+        <td style="text-align:right;padding:7px 8px;color:#60a5fa">${fmtFull(d.dynamo)}</td>
+        <td style="text-align:right;padding:7px 8px;font-weight:700">${fmt(d.total)}<br><span style="font-size:10px;color:var(--text-muted);font-weight:400">${fmtFull(perEng)}/eng</span></td>
+      </tr>`;
+    });
 
     const script = document.createElement('script');
     script.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js';
@@ -1017,23 +1069,23 @@ HTTP_STATUS=$(curl -s -o "$ELEVATION_RESPONSE_FILE" -w "%{http_code}" \
       new Chart(ctx, {
         type: 'bar',
         data: {
-          labels,
+          labels: data.map(d => d.label),
           datasets: [
             {
               label: 'Bedrock',
-              data: data.map(d => +d.bedrock.toFixed(3)),
+              data: data.map(d => +d.bedrock.toFixed(4)),
               backgroundColor: '#f87171',
               borderRadius: 5,
             },
             {
               label: 'API Gateway',
-              data: data.map(d => +d.api.toFixed(3)),
+              data: data.map(d => +d.api.toFixed(4)),
               backgroundColor: '#34d399',
               borderRadius: 5,
             },
             {
               label: 'DynamoDB',
-              data: data.map(d => +d.dynamo.toFixed(3)),
+              data: data.map(d => +d.dynamo.toFixed(4)),
               backgroundColor: '#60a5fa',
               borderRadius: 5,
             },
@@ -1047,14 +1099,14 @@ HTTP_STATUS=$(curl -s -o "$ELEVATION_RESPONSE_FILE" -w "%{http_code}" \
             tooltip: {
               callbacks: {
                 label: c => ` ${c.dataset.label}: $${c.parsed.y.toFixed(3)}`,
-                footer: items => `Total: $${items.reduce((s,i) => s + i.parsed.y, 0).toFixed(2)}/mo`
+                footer: items => `Total: ${fmt(items.reduce((s,i) => s + i.parsed.y, 0))}/mo`
               }
             }
           },
           scales: {
             x: {
               stacked: true,
-              title: { display: true, text: 'Requests / month', font: { size: 11 } },
+              title: { display: true, text: 'Team size', font: { size: 11 } },
               grid: { display: false }
             },
             y: {
