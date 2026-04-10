@@ -674,6 +674,32 @@ Resources:
             TableName: !Ref RequestsTable
 
   # -------------------------------------------------------------------------
+  # Lambda: getCostReport  POST /slack/cost
+  # Handles /admin-cost slash command — returns MTD and previous-month AWS costs
+  # broken down by service, filtered to Project: temp-admin-access tag
+  # -------------------------------------------------------------------------
+  GetCostReportFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: admin-access-getCostReport
+      Handler: getCostReport/index.handler
+      Description: Returns AWS cost breakdown (MTD + prev month) via Slack slash command
+      Environment:
+        Variables:
+          SLACK_IT_ADMIN_IDS: !Ref SlackItAdminIds
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /slack/cost
+            Method: post
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: ce:GetCostAndUsage
+              Resource: '*'
+
+  # -------------------------------------------------------------------------
   # Lambda: handleUserEnd  POST /end
   # Called by the "End Admin Access" Self Service script when user finishes early
   # -------------------------------------------------------------------------
@@ -853,3 +879,7 @@ Outputs:
   SlashCommandEndpoint:
     Description: Slack slash command request URL — register at api.slack.com/apps under Slash Commands
     Value: !Sub 'https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/slack/slash'
+
+  CostReportEndpoint:
+    Description: /admin-cost slash command request URL — register at api.slack.com/apps under Slash Commands
+    Value: !Sub 'https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/slack/cost'
