@@ -3919,7 +3919,7 @@ fi
 # ---------------------------------------------------------------------------
 echo "Building request payload..."
 SERIAL_SAFE=$(echo "$SERIAL" | tr -d '\000-\037')
-HOSTNAME_SAFE=$(echo "$HOSTNAME" | tr -d '\000-\037')
+HOSTNAME_SAFE=$(echo "$HOSTNAME" | tr -d '\000-\037' | sed 's/[^a-zA-Z0-9._-]//g')
 # N8-19: whitelist USERNAME — allow only alphanumeric, dot, underscore, hyphen.
 # tr -d removes ASCII control chars; sed removes Unicode zero-width and other non-whitelisted chars.
 USERNAME_SAFE=$(echo "$USERNAME" | tr -d '\000-\037' | sed 's/[^a-zA-Z0-9._-]//g')
